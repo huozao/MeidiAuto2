@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 库存表着色脚本（覆盖保存到原文件）
-
 ✅ 本版已修复：淡红/淡紫扩展时“空单元格不着色”的问题（现在整段范围都会铺满）
 ✅ 支持：淡色扩展两段 A~K + M~T（可配置）
 ✅ 支持：按某列（默认C列）命中指定值整行跳过着色（可配置）
@@ -12,7 +11,6 @@ import os
 import sys
 import glob
 from pathlib import Path
-
 import openpyxl
 from openpyxl.styles import PatternFill
 from openpyxl.utils import column_index_from_string, get_column_letter

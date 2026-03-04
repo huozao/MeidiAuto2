@@ -12,8 +12,8 @@ import webbrowser
 import os
 
 # ========== 配置区 ==========
-EXCEL_PATH = r"C:\Users\ishel\Desktop\美的发货\月度汇总\月汇总表2502-2506.xlsx"
-OUTPUT_HTML = r"C:\Users\ishel\Desktop\美的发货\月度汇总\月度入库量折线图_显示编号和数量.html"
+EXCEL_PATH = r"C:\Users\ishel\Desktop\坚果备份\A四川和裕达新材料有限公司\32重庆-美的\美的发货\月度汇总\月汇总表2502-2602.xlsx"
+OUTPUT_HTML = r"C:\Users\ishel\Desktop\坚果备份\A四川和裕达新材料有限公司\32重庆-美的\美的发货\月度汇总\月度入库量折线图_显示编号和数量.html"
 # ============================
 
 def generate_line_chart():
