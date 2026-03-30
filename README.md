@@ -282,3 +282,13 @@ git push
 3. 删除冲突标记并保证代码可运行；
 4. 再执行一次 `python main.py --dry-run` 和 `python main.py --check`；
 5. 最后 `git add` + `git commit` + `git push`。
+
+### 冲突时到底该怎么选（直接结论）
+
+按这个顺序判断即可：
+
+1. **如果 incoming 里有你刚新增的参数/功能（例如 `--clean-only`、`--clean-after-run`）而 current 没有：选 `Accept incoming change`。**
+2. **如果 current 和 incoming 各自改了不同内容：选 `Accept both changes`，然后手动删重复行，保留两边有效改动。**
+3. **如果 incoming 明显是旧版本（把中文日志、新参数、编码修复都删掉）：选 `Accept current change`。**
+
+针对你截图那段 `parse_args()`，通常应优先保留包含 `--clean-only` 与 `--clean-after-run` 的版本；如果另一边还有你需要的参数，就用 `Accept both` 后手工合并成一份完整参数列表。
