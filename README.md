@@ -287,8 +287,8 @@ python main.py --data-dir data-local --stop-on-error --report-file data-local/ru
 
 ## 兼容说明
 
-- 已保留历史脚本与备用 workflow（`run_script.yml`）用于回归验证。
-- 默认生产链路仍以 `main.py` + `run-daily.yml` 为准，历史脚本不在默认编排步骤内。
+- 默认生产链路以 `main.py` + `run-daily.yml` 为准。
+- 已移除失效的历史 workflow，避免在 GitHub Actions 中触发不存在脚本导致失败。
 
 
 ## 运行前检查
