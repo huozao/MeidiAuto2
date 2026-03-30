@@ -19,6 +19,32 @@ python main.py --check
 python main.py --data-dir data --stop-on-error --report-file data/run-report.json
 ```
 
+### GitHub Actions 自动运行
+
+仓库已提供 `.github/workflows/run-daily.yml`，支持两种触发方式：
+
+- `workflow_dispatch`：在 Actions 页面手动点击运行；
+- `schedule`：按 cron 自动定时运行（当前配置是每天 UTC 11:00）。
+
+首次启用前，请在仓库 `Settings -> Secrets and variables -> Actions` 中配置：
+
+- `EMAIL_ADDRESS_QQ`
+- `EMAIL_PASSWORD_QQ`（或兼容旧变量 `EMAIL_PASSWOR_QQ`）
+- `IMAP_SERVER`（可选）
+
+### GitHub Actions 与本地是否可同时运行
+
+可以同时进行：
+
+- 远端 GitHub Actions 在 GitHub Runner 上执行；
+- 本地运行在你自己的电脑上执行。
+
+两者互不阻塞，但建议注意以下事项：
+
+- 两边都在读同一邮箱时，可能出现重复下载/重复处理；
+- 建议本地测试时使用独立 `--data-dir`（例如 `data-local`）；
+- 若需避免同一时段重复发送邮件，可将本地运行设置为 `--dry-run` 先验证流程。
+
 ### 仅查看执行计划
 
 ```bash
@@ -30,6 +56,36 @@ python main.py --dry-run
 - `EMAIL_ADDRESS_QQ`
 - `EMAIL_PASSWORD_QQ`（兼容历史变量 `EMAIL_PASSWOR_QQ`）
 - `IMAP_SERVER`（可选，默认 `imap.qq.com`）
+
+## `.env` 安全与联调建议
+
+不建议把真实 `.env` 文件直接发给任何人（包括我），避免密码与邮箱凭据泄露。
+
+推荐做法：
+
+1. 本地创建 `.env` 并自行保管（加入 `.gitignore`，不要提交到仓库）。
+2. 我可以基于你提供的**脱敏样例**帮你检查格式是否正确，例如：
+
+```env
+EMAIL_ADDRESS_QQ=demo@example.com
+EMAIL_PASSWORD_QQ=********
+IMAP_SERVER=imap.qq.com
+```
+
+3. 本地验证时先跑：
+
+```bash
+python main.py --check
+python main.py --dry-run
+```
+
+4. 再执行完整链路（建议先用独立数据目录）：
+
+```bash
+python main.py --data-dir data-local --stop-on-error --report-file data-local/run-report.json
+```
+
+5. 若要云端验证，把同名变量配置到 GitHub Secrets，然后手动触发 `run-daily.yml` 的 `workflow_dispatch`。
 
 ## 设计原则
 
