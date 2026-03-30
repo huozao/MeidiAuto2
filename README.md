@@ -25,6 +25,22 @@ python main.py --data-dir data --stop-on-error --report-file data/run-report.jso
 2. `python main.py --dry-run`：确认执行顺序和参数无误。
 3. `python main.py --data-dir data-local --stop-on-error --report-file data-local/run-report.json`：做一次完整联调并保留报告。
 
+## 新手说明：`--dry-run` 到底是什么？
+
+你可以把 `--dry-run` 理解成“**演习模式**”：
+
+- 会把“将要执行哪些步骤”打印出来；
+- **不会真正执行**下载邮件、处理 Excel、发邮件等动作；
+- 适合第一次上手时确认流程是否正确。
+
+对比：
+
+- `python main.py --dry-run`：只看计划，不改任何文件；
+- `python main.py --check`：检查环境变量和脚本是否存在；
+- `python main.py ...`（不带 `--dry-run`）：真正执行流程。
+
+建议新手顺序：先 `--check`，再 `--dry-run`，最后正式执行。
+
 如果你要手动清理测试产物或自动运行后的冗余文件，可用：
 
 - `python main.py --clean-only`：只执行 `script/010 clean.py`；
@@ -53,6 +69,49 @@ docker run --rm -it \
   -e IMAP_SERVER=imap.qq.com \
   python:3.12 bash -lc "pip install -r requirements.txt && python main.py --check && python main.py --data-dir data-docker --stop-on-error --report-file data-docker/run-report.json"
 ```
+
+### 新手版：Docker 从拉取到运行（一步一步）
+
+1. **拉取 Python 镜像**
+
+```bash
+docker pull python:3.12
+```
+
+2. **进入项目目录**（里面要有 `main.py` 和 `requirements.txt`）
+
+```bash
+cd MeidiAuto2
+```
+
+3. **运行容器并执行流水线**
+
+```bash
+docker run --rm -it \
+  -v "$PWD":/app \
+  -w /app \
+  -e EMAIL_ADDRESS_QQ=你的邮箱 \
+  -e EMAIL_PASSWORD_QQ=你的授权码 \
+  -e IMAP_SERVER=imap.qq.com \
+  python:3.12 bash -lc "pip install -r requirements.txt && python main.py --check && python main.py --dry-run"
+```
+
+4. **确认无误后再执行正式跑**
+
+```bash
+docker run --rm -it \
+  -v "$PWD":/app \
+  -w /app \
+  -e EMAIL_ADDRESS_QQ=你的邮箱 \
+  -e EMAIL_PASSWORD_QQ=你的授权码 \
+  -e IMAP_SERVER=imap.qq.com \
+  python:3.12 bash -lc "pip install -r requirements.txt && python main.py --data-dir data-docker --stop-on-error --clean-after-run --report-file data-docker/run-report.json"
+```
+
+5. **查看结果文件**
+
+- `data-docker/run-report.json`：最终成功/失败报告；
+- 若启用了 `--clean-after-run`，会在主流程后执行 `010 clean.py` 做清理。
 
 若需要在容器中一并清理产物，可在末尾追加：
 
