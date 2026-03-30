@@ -258,3 +258,27 @@ python main.py --check
 ## 运行报告
 
 可通过 `--report-file` 输出一次运行的 JSON 报告，便于追踪失败步骤。
+
+## 常见问题：出现 `Accept current/incoming/both changes` 是什么？
+
+这是 **Git 合并冲突（merge conflict）**，不是运行错误。通常出现在你本地分支和远端分支都改了同一段代码时。
+
+- `Accept current change`：保留你当前分支的代码；
+- `Accept incoming change`：保留对方（要合并进来）分支的代码；
+- `Accept both changes`：两边都保留（随后通常还要手动整理一次）。
+
+你**不需要去网页上“确认提交代码”**，而是要先在本地把冲突处理完，再提交：
+
+```bash
+git add <冲突文件>
+git commit -m "resolve merge conflict"
+git push
+```
+
+建议流程（新手版）：
+
+1. 先看冲突文件里 `<<<<<<<`, `=======`, `>>>>>>>` 三段标记；
+2. 选 current / incoming / both 其中一种；
+3. 删除冲突标记并保证代码可运行；
+4. 再执行一次 `python main.py --dry-run` 和 `python main.py --check`；
+5. 最后 `git add` + `git commit` + `git push`。
