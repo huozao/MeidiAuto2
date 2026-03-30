@@ -41,6 +41,7 @@ CLEANUP_STEP = PipelineStep("010 clean.py", required=False)
 REQUIRED_ENV_KEYS: tuple[str, ...] = (
     "EMAIL_ADDRESS_QQ",
     "EMAIL_PASSWORD_QQ|EMAIL_PASSWOR_QQ",
+    "RECIPIENT_EMAILS",
 )
 
 

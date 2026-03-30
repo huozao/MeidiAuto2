@@ -88,6 +88,7 @@ docker run --rm -it \
   -w /app \
   -e EMAIL_ADDRESS_QQ=xxx \
   -e EMAIL_PASSWORD_QQ=xxx \
+  -e RECIPIENT_EMAILS="a@example.com,b@example.com" \
   -e IMAP_SERVER=imap.qq.com \
   python:3.12 bash -lc "pip install -r requirements.txt && python main.py --check && python main.py --data-dir data-docker --stop-on-error --report-file data-docker/run-report.json"
 ```
@@ -114,6 +115,7 @@ docker run --rm -it \
   -w /app \
   -e EMAIL_ADDRESS_QQ=你的邮箱 \
   -e EMAIL_PASSWORD_QQ=你的授权码 \
+  -e RECIPIENT_EMAILS="收件人1,收件人2" \
   -e IMAP_SERVER=imap.qq.com \
   python:3.12 bash -lc "pip install -r requirements.txt && python main.py --check && python main.py --dry-run"
 ```
@@ -126,6 +128,7 @@ docker run --rm -it \
   -w /app \
   -e EMAIL_ADDRESS_QQ=你的邮箱 \
   -e EMAIL_PASSWORD_QQ=你的授权码 \
+  -e RECIPIENT_EMAILS="收件人1,收件人2" \
   -e IMAP_SERVER=imap.qq.com \
   python:3.12 bash -lc "pip install -r requirements.txt && python main.py --data-dir data-docker --stop-on-error --clean-after-run --report-file data-docker/run-report.json"
 ```
@@ -152,6 +155,7 @@ python main.py --data-dir data-docker --stop-on-error --clean-after-run --report
 
 - `EMAIL_ADDRESS_QQ`
 - `EMAIL_PASSWORD_QQ`（或兼容旧变量 `EMAIL_PASSWOR_QQ`）
+- `RECIPIENT_EMAILS`（必需；逗号分隔多个收件人）
 - `IMAP_SERVER`（可选）
 
 ### GitHub Actions 跑完后，`data/` 会不会留痕？
@@ -201,6 +205,7 @@ python main.py --dry-run
 
 - `EMAIL_ADDRESS_QQ`
 - `EMAIL_PASSWORD_QQ`（兼容历史变量 `EMAIL_PASSWOR_QQ`）
+- `RECIPIENT_EMAILS`（必需，例：`a@example.com,b@example.com`）
 - `IMAP_SERVER`（可选，默认 `imap.qq.com`）
 
 ## `.env` 安全与联调建议
@@ -217,6 +222,7 @@ python main.py --dry-run
 ```env
 EMAIL_ADDRESS_QQ=demo@example.com
 EMAIL_PASSWORD_QQ=********
+RECIPIENT_EMAILS=a@example.com,b@example.com
 IMAP_SERVER=imap.qq.com
 ```
 
@@ -239,6 +245,7 @@ python main.py --data-dir data-local --stop-on-error --report-file data-local/ru
 
 - `.env` 的 `EMAIL_ADDRESS_QQ=xxx` -> GitHub Secret 名称：`EMAIL_ADDRESS_QQ`
 - `.env` 的 `EMAIL_PASSWORD_QQ=xxx` -> GitHub Secret 名称：`EMAIL_PASSWORD_QQ`
+- `.env` 的 `RECIPIENT_EMAILS=a@example.com,b@example.com` -> GitHub Secret 名称：`RECIPIENT_EMAILS`
 - `.env` 的 `IMAP_SERVER=imap.qq.com` -> GitHub Secret 名称：`IMAP_SERVER`（可选）
 
 ## 设计原则
