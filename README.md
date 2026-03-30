@@ -57,6 +57,36 @@ python main.py --dry-run
 - `EMAIL_PASSWORD_QQ`（兼容历史变量 `EMAIL_PASSWOR_QQ`）
 - `IMAP_SERVER`（可选，默认 `imap.qq.com`）
 
+## `.env` 安全与联调建议
+
+不建议把真实 `.env` 文件直接发给任何人（包括我），避免密码与邮箱凭据泄露。
+
+推荐做法：
+
+1. 本地创建 `.env` 并自行保管（加入 `.gitignore`，不要提交到仓库）。
+2. 我可以基于你提供的**脱敏样例**帮你检查格式是否正确，例如：
+
+```env
+EMAIL_ADDRESS_QQ=demo@example.com
+EMAIL_PASSWORD_QQ=********
+IMAP_SERVER=imap.qq.com
+```
+
+3. 本地验证时先跑：
+
+```bash
+python main.py --check
+python main.py --dry-run
+```
+
+4. 再执行完整链路（建议先用独立数据目录）：
+
+```bash
+python main.py --data-dir data-local --stop-on-error --report-file data-local/run-report.json
+```
+
+5. 若要云端验证，把同名变量配置到 GitHub Secrets，然后手动触发 `run-daily.yml` 的 `workflow_dispatch`。
+
 ## 设计原则
 
 - 以 `main.py` 作为单一入口，避免多入口导致流程分叉。
