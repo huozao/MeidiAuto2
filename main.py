@@ -86,6 +86,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="流水线结束后执行清理脚本（用于删除测试/冗余产物）",
     )
+    parser.add_argument(
+        "--list-steps",
+        action="store_true",
+        help="仅列出可运行步骤后退出",
+    )
+    parser.add_argument(
+        "--only-step",
+        action="append",
+        default=[],
+        help="仅运行指定步骤（可重复；可填完整文件名、编号前缀或关键字，如 030 / '041 operation.py'）",
+    )
     return parser.parse_args()
 
 
@@ -107,6 +118,38 @@ def missing_step_files(script_dir: Path, steps: Iterable[PipelineStep]) -> list[
         if step.required and not (script_dir / step.filename).exists():
             missing.append(step.filename)
     return missing
+
+
+def resolve_steps(only_step_args: list[str], all_steps: tuple[PipelineStep, ...]) -> tuple[tuple[PipelineStep, ...], list[str]]:
+    if not only_step_args:
+        return all_steps, []
+
+    requests: list[str] = []
+    for raw in only_step_args:
+        for part in raw.split(","):
+            token = part.strip()
+            if token:
+                requests.append(token)
+
+    resolved: list[PipelineStep] = []
+    invalid: list[str] = []
+    for token in requests:
+        token_lower = token.lower()
+        matched = [
+            step
+            for step in all_steps
+            if step.filename.lower() == token_lower
+            or step.filename.lower().startswith(token_lower)
+            or token_lower in step.filename.lower()
+        ]
+        if not matched:
+            invalid.append(token)
+            continue
+        for step in matched:
+            if step not in resolved:
+                resolved.append(step)
+
+    return tuple(resolved), invalid
 
 
 def run_step(step: PipelineStep, script_dir: Path, data_dir: Path) -> tuple[bool, float]:
@@ -179,15 +222,31 @@ def main() -> int:
 
     print(f"📁 脚本目录：{script_dir}")
     print(f"📁 数据目录：{data_dir}")
-    print(f"📋 步骤总数：{len(PIPELINE_STEPS)}")
+    if args.list_steps:
+        print("📋 可运行步骤：")
+        for index, step in enumerate(PIPELINE_STEPS, start=1):
+            print(f"{index:02d}. {step.filename}")
+        print("🧹 清理步骤：010 clean.py（通过 --clean-only 或 --clean-after-run 启用）")
+        return 0
+
+    selected_steps, invalid_steps = resolve_steps(args.only_step, PIPELINE_STEPS)
+    if invalid_steps:
+        print(f"❌ 未识别的步骤标识：{', '.join(invalid_steps)}")
+        print("可先执行 `python main.py --list-steps` 查看可用步骤。")
+        return 2
+    if not selected_steps and not args.clean_only:
+        print("❌ 没有可执行步骤。可先执行 `python main.py --list-steps`。")
+        return 2
+
+    print(f"📋 步骤总数：{len(selected_steps)}")
 
     if not script_dir.exists():
         print(f"❌ 脚本目录不存在：{script_dir}")
         return 2
 
-    steps_to_check: tuple[PipelineStep, ...] = PIPELINE_STEPS
+    steps_to_check: tuple[PipelineStep, ...] = selected_steps
     if args.clean_only or args.clean_after_run:
-        steps_to_check = PIPELINE_STEPS + (CLEANUP_STEP,)
+        steps_to_check = selected_steps + (CLEANUP_STEP,)
     missing_files = missing_step_files(script_dir, steps_to_check)
     missing_env = check_environment()
 
@@ -196,7 +255,7 @@ def main() -> int:
         if args.clean_only:
             planned_steps.append(CLEANUP_STEP.filename)
         else:
-            planned_steps.extend(step.filename for step in PIPELINE_STEPS)
+            planned_steps.extend(step.filename for step in selected_steps)
             if args.clean_after_run:
                 planned_steps.append(CLEANUP_STEP.filename)
         for index, filename in enumerate(planned_steps, start=1):
@@ -235,7 +294,7 @@ def main() -> int:
     total_time = 0.0
     started_at = time.strftime("%Y-%m-%d %H:%M:%S")
 
-    for step in PIPELINE_STEPS:
+    for step in selected_steps:
         ok, elapsed = run_step(step, script_dir, data_dir)
         total_time += elapsed
         if not ok:
@@ -266,7 +325,7 @@ def main() -> int:
             "elapsed_seconds": round(total_time, 2),
             "success": success,
             "failed_steps": failures,
-            "step_count": len(PIPELINE_STEPS),
+            "step_count": len(selected_steps),
             "data_dir": str(data_dir),
             "script_dir": str(script_dir),
         },

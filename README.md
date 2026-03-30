@@ -25,6 +25,20 @@ python main.py --data-dir data --stop-on-error --report-file data/run-report.jso
 2. `python main.py --dry-run`：确认执行顺序和参数无误。
 3. `python main.py --data-dir data-local --stop-on-error --report-file data-local/run-report.json`：做一次完整联调并保留报告。
 
+若要按阶段逐步核对结果（推荐）：
+
+```bash
+python main.py --list-steps
+python main.py --only-step 020 --data-dir data-local
+python main.py --only-step 021 --data-dir data-local
+python main.py --only-step 030 --data-dir data-local
+```
+
+说明：
+- `--only-step` 可用文件名前缀/关键字（如 `030`、`041 operation.py`）；
+- 适合你逐步检查每个阶段输出是否符合预期；
+- 不建议通过注释代码来“跳过步骤”，容易引入误差和忘记恢复。
+
 ## 新手说明：`--dry-run` 到底是什么？
 
 你可以把 `--dry-run` 理解成“**演习模式**”：
@@ -139,6 +153,30 @@ python main.py --data-dir data-docker --stop-on-error --clean-after-run --report
 - `EMAIL_ADDRESS_QQ`
 - `EMAIL_PASSWORD_QQ`（或兼容旧变量 `EMAIL_PASSWOR_QQ`）
 - `IMAP_SERVER`（可选）
+
+### GitHub Actions 跑完后，`data/` 会不会留痕？
+
+默认不会长期留痕在仓库里：
+
+- GitHub Actions Runner 是临时环境，任务结束后工作目录会销毁；
+- `data/` 里的文件只在本次任务内存在；
+- 只有显式 `upload-artifact` 的内容会被保留（当前主要保留运行报告）。
+
+所以把运行中间产物放在 `data/` 是合理的；需要长期保存时再按需上传 artifact 即可。
+
+### 本地调试建议：断点 / PyCharm / Docker 怎么选
+
+推荐优先级：
+
+1. **先用 `--only-step` 分阶段运行**（最快）；
+2. **再在 PyCharm 对单个脚本打断点**（最直观）；
+3. **Docker 主要用于环境一致性验证**，断点调试成本更高（需远程调试配置）。
+
+结论：
+
+- PyCharm：非常适合加断点调试；
+- Docker：可以调试但配置复杂，先不作为首选；
+- 注释 `main.py` 某些行：不推荐，容易改乱流程，建议用参数控制（`--only-step` / `--clean-only`）。
 
 ### GitHub Actions 与本地是否可同时运行
 
@@ -266,6 +304,30 @@ python main.py --check
 ## 运行报告
 
 可通过 `--report-file` 输出一次运行的 JSON 报告，便于追踪失败步骤。
+
+## 架构评估与演进建议（讨论版）
+
+当前“多子脚本串行处理 Excel”的方案**可用且直观**，适合业务规则经常变化、由非开发同事共同维护的阶段。
+
+从运行日志看，现状优势：
+
+- 每一步输入/输出都可见，定位问题快；
+- 单步失败可快速重跑，不必全链路重来；
+- Excel 产物天然可人工复核，利于业务确认。
+
+但中长期风险也明显：
+
+- 脚本之间靠“文件名约定 + 覆盖写回”传递状态，耦合较强；
+- 同一文件多次读写（021/030/032/033/041/042）对性能和一致性不友好；
+- 业务规则散落在多个脚本，回归测试成本高。
+
+建议按“低风险渐进”改造，而不是一次重写：
+
+1. 先统一数据模型：把每步关键字段落成 `data/intermediate/*.parquet|csv`；
+2. 再把 030/032/033/041 的纯计算逻辑收敛到一个 `transform` 模块；
+3. 最后保留 042（着色）与 051（发邮件）作为独立输出层。
+
+这样能保留你现在的可读性与可回滚能力，同时明显降低“脚本链条越拉越长”的维护风险。
 
 ## 常见问题：出现 `Accept current/incoming/both changes` 是什么？
 
