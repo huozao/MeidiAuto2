@@ -8,6 +8,12 @@ from email.mime.application import MIMEApplication
 from email.mime.image import MIMEImage
 from dotenv import load_dotenv
 
+
+def parse_recipients(raw: str) -> list[str]:
+    """支持逗号/分号分隔的收件人列表。"""
+    parts = raw.replace(";", ",").split(",")
+    return [item.strip() for item in parts if item.strip()]
+
 # ================================
 # 文件路径配置
 # ================================
@@ -78,9 +84,10 @@ print(f"✅ 已成功读取 HTML 文件内容")
 # 加载 .env 文件中的变量
 load_dotenv()
 
-# 从环境变量中读取邮箱和授权码
+# 从环境变量中读取邮箱、授权码、收件人
 email_user = os.getenv("EMAIL_ADDRESS_QQ")
-email_password = os.getenv("EMAIL_PASSWOR_QQ")  # 注意变量名拼写！
+email_password = os.getenv("EMAIL_PASSWORD_QQ") or os.getenv("EMAIL_PASSWOR_QQ")
+recipient_raw = os.getenv("RECIPIENT_EMAILS", "")
 
 if not email_user or not email_password:
     raise ValueError("❌ 环境变量未正确配置，无法获取邮箱账户或密码！")
@@ -88,8 +95,9 @@ if not email_user or not email_password:
 # 以下是你原本的逻辑
 print("📬 正在使用邮箱:", email_user)
 
-# 多个收件人的邮箱，使用逗号分隔
-to_email_list = [ 'ishell@aliyun.com','ishell168@qq.com','zhou345616422@163.com'] #,'1421281576@qq.com'
+to_email_list = parse_recipients(recipient_raw)
+if not to_email_list:
+    raise ValueError("❌ 未设置 RECIPIENT_EMAILS，无法确定收件人列表。")
 
 # 将收件人邮箱列表转换为逗号分隔的字符串git remote set-url origin git@github.com:nihil7/
 to_email = ', '.join(to_email_list)
