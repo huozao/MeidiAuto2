@@ -168,6 +168,23 @@ python main.py --data-dir data-docker --stop-on-error --clean-after-run --report
 
 所以把运行中间产物放在 `data/` 是合理的；需要长期保存时再按需上传 artifact 即可。
 
+### GitHub Actions 常见失败：`Connection refused`（IMAP 连接被拒）
+
+若日志出现：
+
+- `获取邮件失败: [Errno 111] Connection refused`
+
+通常不是代码逻辑错误，而是邮箱服务侧对 GitHub 公网 Runner 网络做了限制（或端口策略、白名单策略）。
+
+建议按优先级处理：
+
+1. 先确认 `IMAP_SERVER`、邮箱授权码、IMAP 开关都正确；
+2. 在本地网络验证同一账号可连通；
+3. 若仅 GitHub Hosted Runner 失败，改用 **self-hosted runner**（公司/本地固定出口 IP）执行；
+4. 或在邮箱侧配置允许策略（如有白名单能力）。
+
+说明：当前流水线已配置 `--stop-on-error`，020 步骤连不上邮箱会直接失败并停止，避免后续步骤在无输入文件时继续报级联错误。
+
 ### 本地调试建议：断点 / PyCharm / Docker 怎么选
 
 推荐优先级：
