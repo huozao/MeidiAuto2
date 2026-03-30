@@ -36,6 +36,7 @@ PIPELINE_STEPS: tuple[PipelineStep, ...] = (
     PipelineStep("050 mailtxt.py"),
     PipelineStep("051 Send an email.py"),
 )
+CLEANUP_STEP = PipelineStep("010 clean.py", required=False)
 
 REQUIRED_ENV_KEYS: tuple[str, ...] = (
     "EMAIL_ADDRESS_QQ",
@@ -74,6 +75,16 @@ def parse_args() -> argparse.Namespace:
         "--report-file",
         default="",
         help="可选：JSON 报告输出路径（相对路径以仓库根目录为基准）",
+    )
+    parser.add_argument(
+        "--clean-only",
+        action="store_true",
+        help="仅运行清理脚本（010 clean.py）后退出",
+    )
+    parser.add_argument(
+        "--clean-after-run",
+        action="store_true",
+        help="流水线结束后执行清理脚本（用于删除测试/冗余产物）",
     )
     return parser.parse_args()
 
@@ -155,6 +166,10 @@ def write_report(report_file: str, payload: dict, root: Path) -> None:
 
 def main() -> int:
     args = parse_args()
+    if args.clean_only and args.clean_after_run:
+        print("❌ 参数冲突：--clean-only 与 --clean-after-run 不能同时使用。")
+        return 2
+
     root = Path(__file__).resolve().parent
     script_dir = (root / args.script_dir).resolve()
     data_dir = (root / args.data_dir).resolve()
@@ -167,12 +182,26 @@ def main() -> int:
         print(f"❌ 脚本目录不存在：{script_dir}")
         return 2
 
-    missing_files = missing_step_files(script_dir, PIPELINE_STEPS)
+    steps_to_check: tuple[PipelineStep, ...] = PIPELINE_STEPS
+    if args.clean_only or args.clean_after_run:
+        steps_to_check = PIPELINE_STEPS + (CLEANUP_STEP,)
+    missing_files = missing_step_files(script_dir, steps_to_check)
     missing_env = check_environment()
 
     if args.dry_run:
-        for index, step in enumerate(PIPELINE_STEPS, start=1):
-            print(f"{index:02d}. {step.filename}")
+        planned_steps: list[str] = []
+        if args.clean_only:
+            planned_steps.append(CLEANUP_STEP.filename)
+        else:
+            planned_steps.extend(step.filename for step in PIPELINE_STEPS)
+            if args.clean_after_run:
+                planned_steps.append(CLEANUP_STEP.filename)
+        for index, filename in enumerate(planned_steps, start=1):
+            print(f"{index:02d}. {filename}")
+        if args.clean_only:
+            print("🧹 当前仅执行清理步骤。")
+        elif args.clean_after_run:
+            print("🧹 将在流水线结束后追加清理步骤。")
         print("🧪 演练模式执行完成。")
         return 0
 
@@ -189,6 +218,14 @@ def main() -> int:
 
         return 0 if not missing_files else 1
 
+    if args.clean_only:
+        ok, _ = run_step(CLEANUP_STEP, script_dir, data_dir)
+        if ok:
+            print("🧹 清理任务执行完成。")
+            return 0
+        print("❌ 清理任务执行失败。")
+        return 1
+
     os.makedirs(data_dir, exist_ok=True)
 
     failures: list[str] = []
@@ -202,6 +239,13 @@ def main() -> int:
             failures.append(step.filename)
             if args.stop_on_error:
                 break
+
+    if args.clean_after_run:
+        print("\n🧹 开始执行收尾清理（010 clean.py）...")
+        clean_ok, clean_elapsed = run_step(CLEANUP_STEP, script_dir, data_dir)
+        total_time += clean_elapsed
+        if not clean_ok:
+            failures.append(CLEANUP_STEP.filename)
 
     print("\n================ 流水线执行汇总 ================")
     success = not failures

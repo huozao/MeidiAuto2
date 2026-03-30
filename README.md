@@ -25,6 +25,11 @@ python main.py --data-dir data --stop-on-error --report-file data/run-report.jso
 2. `python main.py --dry-run`：确认执行顺序和参数无误。
 3. `python main.py --data-dir data-local --stop-on-error --report-file data-local/run-report.json`：做一次完整联调并保留报告。
 
+如果你要手动清理测试产物或自动运行后的冗余文件，可用：
+
+- `python main.py --clean-only`：只执行 `script/010 clean.py`；
+- `python main.py --clean-after-run --stop-on-error`：主流程结束后追加执行 `010 clean.py`。
+
 运行结果重点看 3 个点：
 
 - 进程退出码是否为 `0`；
@@ -47,6 +52,12 @@ docker run --rm -it \
   -e EMAIL_PASSWORD_QQ=xxx \
   -e IMAP_SERVER=imap.qq.com \
   python:3.12 bash -lc "pip install -r requirements.txt && python main.py --check && python main.py --data-dir data-docker --stop-on-error --report-file data-docker/run-report.json"
+```
+
+若需要在容器中一并清理产物，可在末尾追加：
+
+```bash
+python main.py --data-dir data-docker --stop-on-error --clean-after-run --report-file data-docker/run-report.json
 ```
 
 ### GitHub Actions 自动运行
