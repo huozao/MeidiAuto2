@@ -1,15 +1,20 @@
 import os
 import sys
-import glob
 import openpyxl
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from pipeline.io_utils import resolve_data_dir, find_first_excel
 
 # ================================
 # 📂 文件路径配置
 # ================================
-default_inventory_folder = os.path.abspath(os.path.join(os.getcwd(), "data"))
-inventory_folder = sys.argv[1] if len(sys.argv) >= 2 else default_inventory_folder
+inventory_folder = str(resolve_data_dir(sys.argv[1] if len(sys.argv) >= 2 else None))
 print(f"📂 使用路径: {inventory_folder}")
 
 if not os.path.exists(inventory_folder):
@@ -19,14 +24,10 @@ if not os.path.exists(inventory_folder):
 # ================================
 # 1. 查找文件
 # ================================
-pattern = os.path.join(inventory_folder, '总库存*.xlsx')
-valid_files = [f for f in glob.glob(pattern) if not os.path.basename(f).startswith('~$')]
-
-if not valid_files:
+inventory_file = find_first_excel(Path(inventory_folder), "总库存*.xlsx")
+if not inventory_file:
     print("❌ 没有找到符合条件的文件！")
     sys.exit(1)
-
-inventory_file = valid_files[0]
 print(f"✅ 发现库存文件: {inventory_file}")
 
 try:
