@@ -160,6 +160,8 @@ python main.py --data-dir data-docker --stop-on-error --clean-after-run --report
 - `RECIPIENT_EMAILS`（必需；逗号分隔多个收件人）
 - `IMAP_SERVER`（可选）
 
+> 若 `IMAP_SERVER` Secret 留空，workflow 会自动回退到 `imap.qq.com`。
+
 ### GitHub Actions 跑完后，`data/` 会不会留痕？
 
 默认不会长期留痕在仓库里：

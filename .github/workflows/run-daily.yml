@@ -34,7 +34,7 @@ jobs:
       - name: Probe IMAP connectivity
         id: imap_probe
         env:
-          IMAP_SERVER: ${{ secrets.IMAP_SERVER }}
+          IMAP_SERVER: ${{ secrets.IMAP_SERVER || 'imap.qq.com' }}
         run: |
           python - <<'PY'
           import os, socket, json
@@ -61,7 +61,7 @@ jobs:
           EMAIL_PASSWORD_QQ: ${{ secrets.EMAIL_PASSWORD_QQ }}
           EMAIL_PASSWOR_QQ: ${{ secrets.EMAIL_PASSWOR_QQ }}
           RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
-          IMAP_SERVER: ${{ secrets.IMAP_SERVER }}
+          IMAP_SERVER: ${{ secrets.IMAP_SERVER || 'imap.qq.com' }}
         run: python main.py --check
 
       - name: Run pipeline
@@ -73,7 +73,7 @@ jobs:
           EMAIL_PASSWORD_QQ: ${{ secrets.EMAIL_PASSWORD_QQ }}
           EMAIL_PASSWOR_QQ: ${{ secrets.EMAIL_PASSWOR_QQ }}
           RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
-          IMAP_SERVER: ${{ secrets.IMAP_SERVER }}
+          IMAP_SERVER: ${{ secrets.IMAP_SERVER || 'imap.qq.com' }}
         run: python main.py --data-dir data --stop-on-error --report-file data/run-report.json
 
       - name: Skip run when IMAP unreachable
