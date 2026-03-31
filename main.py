@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import subprocess
@@ -181,11 +182,31 @@ def run_step(step: PipelineStep, script_dir: Path, data_dir: Path) -> tuple[bool
         print(stderr_text)
 
     if completed.returncode == 0:
+        output_ok, output_msg = validate_step_output(step, data_dir)
+        if not output_ok:
+            print(f"❌ {step.filename} 输出校验失败：{output_msg}")
+            return False, elapsed
         print(f"✅ {step.filename} 执行完成，用时 {elapsed:.2f}s")
         return True, elapsed
 
     print(f"❌ {step.filename} 执行失败（退出码={completed.returncode}），用时 {elapsed:.2f}s")
     return False, elapsed
+
+
+def validate_step_output(step: PipelineStep, data_dir: Path) -> tuple[bool, str]:
+    """关键步骤产物校验，防止子脚本误返回 0 导致级联失败。"""
+    if step.filename == "020 Email download.py":
+        meta_path = data_dir / "mail_meta.json"
+        stock_files = glob.glob(str(data_dir / "存量查询*.xlsx"))
+        if not meta_path.exists():
+            return False, "缺少 mail_meta.json（邮件元数据未生成）"
+        if not stock_files:
+            return False, "缺少 存量查询*.xlsx（邮件表格未导出）"
+    if step.filename == "021 Merge excel.py":
+        merged_files = glob.glob(str(data_dir / "总库存*.xlsx"))
+        if not merged_files:
+            return False, "缺少 总库存*.xlsx（合并文件未生成）"
+    return True, ""
 
 
 def _decode_subprocess_output(raw: bytes) -> str:

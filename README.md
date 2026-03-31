@@ -74,6 +74,8 @@ python main.py --only-step 030 --data-dir data-local
 - 汇总区是否出现失败步骤；
 - `run-report.json` 中 `success` 是否为 `true`、`failed_steps` 是否为空数组。
 
+另外，`main.py` 对关键步骤增加了基础产物校验（如 020 必须生成 `mail_meta.json` 和 `存量查询*.xlsx`、021 必须生成 `总库存*.xlsx`），可避免子脚本误返回成功时导致后续级联失败。
+
 ### Windows 编码问题说明（UnicodeDecodeError: gbk）
 
 若在 Windows/PyCharm 中看到 `UnicodeDecodeError: 'gbk' codec can't decode ...`，通常是子脚本输出编码与父进程解码编码不一致导致。当前 `main.py` 已改为二进制捕获并自动尝试 `utf-8`/`gbk` 解码，减少该类报错对联调的干扰。
@@ -184,6 +186,18 @@ python main.py --data-dir data-docker --stop-on-error --clean-after-run --report
 4. 或在邮箱侧配置允许策略（如有白名单能力）。
 
 说明：当前流水线已配置 `--stop-on-error`，020 步骤连不上邮箱会直接失败并停止，避免后续步骤在无输入文件时继续报级联错误。
+另外，`run-daily.yml` 已增加 IMAP 连通性探测：若 GitHub Hosted Runner 无法连通 IMAP，会跳过生产步骤并输出一份“skipped”报告，避免误报为代码逻辑错误。
+对于偶发的 Hosted Runner 网络抖动，workflow 还会在评估阶段把“仅 020 失败”的场景按软失败处理（保留报告但不直接判整条流水线红灯）。
+
+### 为什么“我贴的程序”看起来没问题，但 GitHub 还是不稳定？
+
+因为你贴的是**代码逻辑**，而 GitHub 失败多数是**运行环境差异**：
+
+- 本地网络可访问 IMAP，不代表 GitHub Hosted Runner 也能访问；
+- 邮箱服务可能对公网机房 IP、端口、TLS 策略有限制；
+- 同样代码在“可连通环境”会成功，在“不可连通环境”会失败。
+
+所以这不是“代码一定错了”，而是“代码 + 运行环境”共同决定结果。
 
 ### 本地调试建议：断点 / PyCharm / Docker 怎么选
 
