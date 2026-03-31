@@ -450,3 +450,4 @@ if __name__ == '__main__':
             print("表格为空，未导出 Excel。")
     else:
         print("未获取到 HTML，程序结束。")
+        raise SystemExit(1)

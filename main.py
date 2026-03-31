@@ -1,12 +1,13 @@
-"""Repository pipeline entrypoint.
+"""仓库流水线统一入口。
 
-Runs the production workflow steps in order, sharing a single data directory.
-Designed for local runs and GitHub Actions.
+按固定顺序执行生产步骤，并共享同一个数据目录。
+支持本地运行与 GitHub Actions 运行。
 """
 
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import subprocess
@@ -36,44 +37,67 @@ PIPELINE_STEPS: tuple[PipelineStep, ...] = (
     PipelineStep("050 mailtxt.py"),
     PipelineStep("051 Send an email.py"),
 )
+CLEANUP_STEP = PipelineStep("010 clean.py", required=False)
 
 REQUIRED_ENV_KEYS: tuple[str, ...] = (
     "EMAIL_ADDRESS_QQ",
     "EMAIL_PASSWORD_QQ|EMAIL_PASSWOR_QQ",
+    "RECIPIENT_EMAILS",
 )
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run MeidiAuto pipeline")
+    parser = argparse.ArgumentParser(description="运行 MeidiAuto 自动化流水线")
     parser.add_argument(
         "--data-dir",
         default="data",
-        help="shared output directory used by all steps (default: ./data)",
+        help="所有步骤共用的数据输出目录（默认：./data）",
     )
     parser.add_argument(
         "--script-dir",
         default="script",
-        help="directory containing step scripts (default: ./script)",
+        help="步骤脚本目录（默认：./script）",
     )
     parser.add_argument(
         "--stop-on-error",
         action="store_true",
-        help="stop pipeline immediately when a step fails",
+        help="任一步骤失败后立即停止",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="print the execution plan without running scripts",
+        help="只打印执行计划，不实际运行",
     )
     parser.add_argument(
         "--check",
         action="store_true",
-        help="validate environment and step files only, then exit",
+        help="仅检查环境变量与脚本文件后退出",
     )
     parser.add_argument(
         "--report-file",
         default="",
-        help="optional JSON report path (relative to repo root if not absolute)",
+        help="可选：JSON 报告输出路径（相对路径以仓库根目录为基准）",
+    )
+    parser.add_argument(
+        "--clean-only",
+        action="store_true",
+        help="仅运行清理脚本（010 clean.py）后退出",
+    )
+    parser.add_argument(
+        "--clean-after-run",
+        action="store_true",
+        help="流水线结束后执行清理脚本（用于删除测试/冗余产物）",
+    )
+    parser.add_argument(
+        "--list-steps",
+        action="store_true",
+        help="仅列出可运行步骤后退出",
+    )
+    parser.add_argument(
+        "--only-step",
+        action="append",
+        default=[],
+        help="仅运行指定步骤（可重复；可填完整文件名、编号前缀或关键字，如 030 / '041 operation.py'）",
     )
     return parser.parse_args()
 
@@ -98,33 +122,103 @@ def missing_step_files(script_dir: Path, steps: Iterable[PipelineStep]) -> list[
     return missing
 
 
+def resolve_steps(only_step_args: list[str], all_steps: tuple[PipelineStep, ...]) -> tuple[tuple[PipelineStep, ...], list[str]]:
+    if not only_step_args:
+        return all_steps, []
+
+    requests: list[str] = []
+    for raw in only_step_args:
+        for part in raw.split(","):
+            token = part.strip()
+            if token:
+                requests.append(token)
+
+    resolved: list[PipelineStep] = []
+    invalid: list[str] = []
+    for token in requests:
+        token_lower = token.lower()
+        matched = [
+            step
+            for step in all_steps
+            if step.filename.lower() == token_lower
+            or step.filename.lower().startswith(token_lower)
+            or token_lower in step.filename.lower()
+        ]
+        if not matched:
+            invalid.append(token)
+            continue
+        for step in matched:
+            if step not in resolved:
+                resolved.append(step)
+
+    return tuple(resolved), invalid
+
+
 def run_step(step: PipelineStep, script_dir: Path, data_dir: Path) -> tuple[bool, float]:
     script_path = script_dir / step.filename
     if not script_path.exists():
-        msg = f"❌ Missing step script: {script_path}"
+        msg = f"❌ 缺少步骤脚本：{script_path}"
         if step.required:
             print(msg)
             return False, 0.0
-        print(f"⚠️ {msg} (optional step skipped)")
+        print(f"⚠️ {msg}（可选步骤，已跳过）")
         return True, 0.0
 
     cmd = [sys.executable, str(script_path), str(data_dir)]
-    print(f"\n🚀 Running: {' '.join(cmd)}")
+    print(f"\n🚀 正在运行：{' '.join(cmd)}")
     started = time.time()
-    completed = subprocess.run(cmd, capture_output=True, text=True)
+    env = os.environ.copy()
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    env.setdefault("PYTHONUTF8", "1")
+    completed = subprocess.run(cmd, capture_output=True, text=False, env=env)
     elapsed = time.time() - started
 
-    if completed.stdout:
-        print(completed.stdout)
-    if completed.stderr:
-        print(completed.stderr)
+    stdout_text = _decode_subprocess_output(completed.stdout)
+    stderr_text = _decode_subprocess_output(completed.stderr)
+
+    if stdout_text:
+        print(stdout_text)
+    if stderr_text:
+        print(stderr_text)
 
     if completed.returncode == 0:
-        print(f"✅ Finished {step.filename} in {elapsed:.2f}s")
+        output_ok, output_msg = validate_step_output(step, data_dir)
+        if not output_ok:
+            print(f"❌ {step.filename} 输出校验失败：{output_msg}")
+            return False, elapsed
+        print(f"✅ {step.filename} 执行完成，用时 {elapsed:.2f}s")
         return True, elapsed
 
-    print(f"❌ Failed {step.filename} (exit={completed.returncode}) after {elapsed:.2f}s")
+    print(f"❌ {step.filename} 执行失败（退出码={completed.returncode}），用时 {elapsed:.2f}s")
     return False, elapsed
+
+
+def validate_step_output(step: PipelineStep, data_dir: Path) -> tuple[bool, str]:
+    """关键步骤产物校验，防止子脚本误返回 0 导致级联失败。"""
+    if step.filename == "020 Email download.py":
+        meta_path = data_dir / "mail_meta.json"
+        stock_files = glob.glob(str(data_dir / "存量查询*.xlsx"))
+        if not meta_path.exists():
+            return False, "缺少 mail_meta.json（邮件元数据未生成）"
+        if not stock_files:
+            return False, "缺少 存量查询*.xlsx（邮件表格未导出）"
+    if step.filename == "021 Merge excel.py":
+        merged_files = glob.glob(str(data_dir / "总库存*.xlsx"))
+        if not merged_files:
+            return False, "缺少 总库存*.xlsx（合并文件未生成）"
+    return True, ""
+
+
+def _decode_subprocess_output(raw: bytes) -> str:
+    """尽量兼容 Windows/跨平台编码，避免因 gbk/utf-8 不一致导致解码异常。"""
+    if not raw:
+        return ""
+    for encoding in ("utf-8", "gbk"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
 
 
 def write_report(report_file: str, payload: dict, root: Path) -> None:
@@ -135,44 +229,86 @@ def write_report(report_file: str, payload: dict, root: Path) -> None:
         path = (root / path).resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"🧾 Report written to: {path}")
+    print(f"🧾 运行报告已写入：{path}")
 
 
 def main() -> int:
     args = parse_args()
+    if args.clean_only and args.clean_after_run:
+        print("❌ 参数冲突：--clean-only 与 --clean-after-run 不能同时使用。")
+        return 2
+
     root = Path(__file__).resolve().parent
     script_dir = (root / args.script_dir).resolve()
     data_dir = (root / args.data_dir).resolve()
 
-    print(f"📁 Script directory: {script_dir}")
-    print(f"📁 Data directory: {data_dir}")
-    print(f"📋 Total steps: {len(PIPELINE_STEPS)}")
+    print(f"📁 脚本目录：{script_dir}")
+    print(f"📁 数据目录：{data_dir}")
+    if args.list_steps:
+        print("📋 可运行步骤：")
+        for index, step in enumerate(PIPELINE_STEPS, start=1):
+            print(f"{index:02d}. {step.filename}")
+        print("🧹 清理步骤：010 clean.py（通过 --clean-only 或 --clean-after-run 启用）")
+        return 0
 
-    if not script_dir.exists():
-        print(f"❌ Script directory does not exist: {script_dir}")
+    selected_steps, invalid_steps = resolve_steps(args.only_step, PIPELINE_STEPS)
+    if invalid_steps:
+        print(f"❌ 未识别的步骤标识：{', '.join(invalid_steps)}")
+        print("可先执行 `python main.py --list-steps` 查看可用步骤。")
+        return 2
+    if not selected_steps and not args.clean_only:
+        print("❌ 没有可执行步骤。可先执行 `python main.py --list-steps`。")
         return 2
 
-    missing_files = missing_step_files(script_dir, PIPELINE_STEPS)
+    print(f"📋 步骤总数：{len(selected_steps)}")
+
+    if not script_dir.exists():
+        print(f"❌ 脚本目录不存在：{script_dir}")
+        return 2
+
+    steps_to_check: tuple[PipelineStep, ...] = selected_steps
+    if args.clean_only or args.clean_after_run:
+        steps_to_check = selected_steps + (CLEANUP_STEP,)
+    missing_files = missing_step_files(script_dir, steps_to_check)
     missing_env = check_environment()
 
     if args.dry_run:
-        for index, step in enumerate(PIPELINE_STEPS, start=1):
-            print(f"{index:02d}. {step.filename}")
-        print("🧪 Dry run complete.")
+        planned_steps: list[str] = []
+        if args.clean_only:
+            planned_steps.append(CLEANUP_STEP.filename)
+        else:
+            planned_steps.extend(step.filename for step in selected_steps)
+            if args.clean_after_run:
+                planned_steps.append(CLEANUP_STEP.filename)
+        for index, filename in enumerate(planned_steps, start=1):
+            print(f"{index:02d}. {filename}")
+        if args.clean_only:
+            print("🧹 当前仅执行清理步骤。")
+        elif args.clean_after_run:
+            print("🧹 将在流水线结束后追加清理步骤。")
+        print("🧪 演练模式执行完成。")
         return 0
 
     if args.check:
         if missing_files:
-            print(f"❌ Missing required step files: {', '.join(missing_files)}")
+            print(f"❌ 缺少必需步骤脚本：{', '.join(missing_files)}")
         else:
-            print("✅ All required step files exist.")
+            print("✅ 必需步骤脚本齐全。")
 
         if missing_env:
-            print(f"⚠️ Missing environment variables: {', '.join(missing_env)}")
+            print(f"⚠️ 缺少环境变量：{', '.join(missing_env)}")
         else:
-            print("✅ Required environment variables are available.")
+            print("✅ 必需环境变量已就绪。")
 
         return 0 if not missing_files else 1
+
+    if args.clean_only:
+        ok, _ = run_step(CLEANUP_STEP, script_dir, data_dir)
+        if ok:
+            print("🧹 清理任务执行完成。")
+            return 0
+        print("❌ 清理任务执行失败。")
+        return 1
 
     os.makedirs(data_dir, exist_ok=True)
 
@@ -180,7 +316,7 @@ def main() -> int:
     total_time = 0.0
     started_at = time.strftime("%Y-%m-%d %H:%M:%S")
 
-    for step in PIPELINE_STEPS:
+    for step in selected_steps:
         ok, elapsed = run_step(step, script_dir, data_dir)
         total_time += elapsed
         if not ok:
@@ -188,14 +324,21 @@ def main() -> int:
             if args.stop_on_error:
                 break
 
-    print("\n================ Pipeline Summary ================")
+    if args.clean_after_run:
+        print("\n🧹 开始执行收尾清理（010 clean.py）...")
+        clean_ok, clean_elapsed = run_step(CLEANUP_STEP, script_dir, data_dir)
+        total_time += clean_elapsed
+        if not clean_ok:
+            failures.append(CLEANUP_STEP.filename)
+
+    print("\n================ 流水线执行汇总 ================")
     success = not failures
     if failures:
-        print(f"❌ Failed steps ({len(failures)}): {', '.join(failures)}")
-        print(f"⏱️ Elapsed: {total_time:.2f}s")
+        print(f"❌ 失败步骤（{len(failures)}）：{', '.join(failures)}")
+        print(f"⏱️ 总耗时：{total_time:.2f}s")
     else:
-        print("🎉 All steps completed successfully")
-        print(f"⏱️ Elapsed: {total_time:.2f}s")
+        print("🎉 所有步骤执行成功")
+        print(f"⏱️ 总耗时：{total_time:.2f}s")
 
     write_report(
         args.report_file,
@@ -204,7 +347,7 @@ def main() -> int:
             "elapsed_seconds": round(total_time, 2),
             "success": success,
             "failed_steps": failures,
-            "step_count": len(PIPELINE_STEPS),
+            "step_count": len(selected_steps),
             "data_dir": str(data_dir),
             "script_dir": str(script_dir),
         },
