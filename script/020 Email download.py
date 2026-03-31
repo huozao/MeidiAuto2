@@ -27,6 +27,25 @@ from dotenv import load_dotenv
 # ================================
 TZ_SH = ZoneInfo("Asia/Shanghai")
 
+
+def mask_email(value: str | None) -> str:
+    if not value:
+        return "(empty)"
+    if "@" not in value:
+        return value[:2] + "***"
+    name, domain = value.split("@", 1)
+    if len(name) <= 2:
+        name_masked = name[0] + "*"
+    else:
+        name_masked = name[:2] + "***"
+    return f"{name_masked}@{domain}"
+
+
+def mask_secret(value: str | None) -> str:
+    if not value:
+        return "(empty)"
+    return f"***len={len(value)}"
+
 def now_shanghai() -> datetime:
     return datetime.now(TZ_SH)
 
@@ -67,7 +86,11 @@ email_server = os.getenv("IMAP_SERVER", "imap.qq.com")
 if not email_user or not email_password:
     raise ValueError("❌ 环境变量未正确配置（EMAIL_ADDRESS_QQ / EMAIL_PASSWORD_QQ）！")
 
-print("📬 正在使用邮箱:", email_user)
+print("📬 环境变量检查：")
+print("   EMAIL_ADDRESS_QQ =", mask_email(email_user))
+print("   EMAIL_PASSWORD_QQ/EMAIL_PASSWOR_QQ =", mask_secret(email_password))
+print("   IMAP_SERVER =", email_server)
+print("📬 正在使用邮箱:", mask_email(email_user))
 
 # ================================
 # 🔑 标题解码与清理

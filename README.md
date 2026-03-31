@@ -199,6 +199,8 @@ python main.py --data-dir data-docker --stop-on-error --clean-after-run --report
 
 所以这不是“代码一定错了”，而是“代码 + 运行环境”共同决定结果。
 
+为便于排查配置问题，020/051 步骤会打印脱敏后的环境变量摘要（如邮箱打码、密码长度、收件人数），不会输出明文授权码。
+
 ### 本地调试建议：断点 / PyCharm / Docker 怎么选
 
 推荐优先级：

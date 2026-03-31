@@ -14,6 +14,25 @@ def parse_recipients(raw: str) -> list[str]:
     parts = raw.replace(";", ",").split(",")
     return [item.strip() for item in parts if item.strip()]
 
+
+def mask_email(value: str | None) -> str:
+    if not value:
+        return "(empty)"
+    if "@" not in value:
+        return value[:2] + "***"
+    name, domain = value.split("@", 1)
+    if len(name) <= 2:
+        name_masked = name[0] + "*"
+    else:
+        name_masked = name[:2] + "***"
+    return f"{name_masked}@{domain}"
+
+
+def mask_secret(value: str | None) -> str:
+    if not value:
+        return "(empty)"
+    return f"***len={len(value)}"
+
 # ================================
 # 文件路径配置
 # ================================
@@ -92,12 +111,15 @@ recipient_raw = os.getenv("RECIPIENT_EMAILS", "")
 if not email_user or not email_password:
     raise ValueError("❌ 环境变量未正确配置，无法获取邮箱账户或密码！")
 
-# 以下是你原本的逻辑
-print("📬 正在使用邮箱:", email_user)
+print("📬 环境变量检查：")
+print("   EMAIL_ADDRESS_QQ =", mask_email(email_user))
+print("   EMAIL_PASSWORD_QQ/EMAIL_PASSWOR_QQ =", mask_secret(email_password))
+print("   RECIPIENT_EMAILS 原始值长度 =", len(recipient_raw))
 
 to_email_list = parse_recipients(recipient_raw)
 if not to_email_list:
     raise ValueError("❌ 未设置 RECIPIENT_EMAILS，无法确定收件人列表。")
+print("📬 收件人数量 =", len(to_email_list))
 
 # 将收件人邮箱列表转换为逗号分隔的字符串git remote set-url origin git@github.com:nihil7/
 to_email = ', '.join(to_email_list)
