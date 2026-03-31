@@ -127,38 +127,6 @@ def resolve_steps(only_step_args: list[str], all_steps: tuple[PipelineStep, ...]
     return tuple(resolved), invalid
 
 
-def resolve_steps(only_step_args: list[str], all_steps: tuple[PipelineStep, ...]) -> tuple[tuple[PipelineStep, ...], list[str]]:
-    if not only_step_args:
-        return all_steps, []
-
-    requests: list[str] = []
-    for raw in only_step_args:
-        for part in raw.split(","):
-            token = part.strip()
-            if token:
-                requests.append(token)
-
-    resolved: list[PipelineStep] = []
-    invalid: list[str] = []
-    for token in requests:
-        token_lower = token.lower()
-        matched = [
-            step
-            for step in all_steps
-            if step.filename.lower() == token_lower
-            or step.filename.lower().startswith(token_lower)
-            or token_lower in step.filename.lower()
-        ]
-        if not matched:
-            invalid.append(token)
-            continue
-        for step in matched:
-            if step not in resolved:
-                resolved.append(step)
-
-    return tuple(resolved), invalid
-
-
 def run_step(step: PipelineStep, script_dir: Path, data_dir: Path) -> tuple[bool, float]:
     script_path = script_dir / step.filename
     if not script_path.exists():

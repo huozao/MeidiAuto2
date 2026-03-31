@@ -352,6 +352,7 @@ python main.py --data-dir data-local --stop-on-error --report-file data-local/ru
 
 - 默认生产链路以 `main.py` + `run-daily.yml` 为准。
 - 已移除失效的历史 workflow，避免在 GitHub Actions 中触发不存在脚本导致失败。
+- 已删除冗余邮件脚本 `script/052 send email.py`，统一由 `script/051 Send an email.py` 负责发信。
 
 
 ## 运行前检查
