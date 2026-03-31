@@ -10,12 +10,13 @@
 import os
 import sys
 import re
-import glob
 import json
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.views import Selection
+from pathlib import Path
+from pipeline.io_utils import resolve_data_dir, find_latest_excel
 
 # =========================================
 # 🔧 CONFIG｜集中配置（只改这里）
@@ -107,16 +108,15 @@ def _read_waiting_time(folder, meta_name, key):
 
 def main(cfg: dict):
     # ---------- 路径 ----------
-    folder_path = sys.argv[1] if len(sys.argv) >= 2 else cfg["default_folder"]
+    folder_path = str(resolve_data_dir(sys.argv[1] if len(sys.argv) >= 2 else None))
     if not os.path.exists(folder_path):
         print(f"❌ 路径不存在: {folder_path}")
         sys.exit(1)
 
-    files = glob.glob(os.path.join(folder_path, cfg["inventory_pattern"]))
-    if not files:
+    latest_file = find_latest_excel(Path(folder_path), cfg["inventory_pattern"])
+    if not latest_file:
         print("❌ 未找到包含“总库存”的文件")
         sys.exit(1)
-    latest_file = max(files, key=os.path.getmtime)
     print(f"📄 处理文件：{latest_file}")
 
     # ---------- 打开工作簿 ----------
