@@ -13,31 +13,12 @@ import os
 import subprocess
 import sys
 import time
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
+from pipeline.models import PipelineStep
+from pipeline.steps import CLEANUP_STEP, PRODUCTION_STEPS
+from pipeline.validators import missing_step_files, validate_step_output
 
-@dataclass(frozen=True)
-class PipelineStep:
-    """A script step executed by the orchestrator."""
-
-    filename: str
-    required: bool = True
-
-
-PIPELINE_STEPS: tuple[PipelineStep, ...] = (
-    PipelineStep("020 Email download.py"),
-    PipelineStep("021 Merge excel.py"),
-    PipelineStep("030 Warehousing at home.py"),
-    PipelineStep("032 Warehousing at out.py"),
-    PipelineStep("033 list insertion.py"),
-    PipelineStep("041 operation.py"),
-    PipelineStep("042 Color display.py"),
-    PipelineStep("050 mailtxt.py"),
-    PipelineStep("051 Send an email.py"),
-)
-CLEANUP_STEP = PipelineStep("010 clean.py", required=False)
 
 REQUIRED_ENV_KEYS: tuple[str, ...] = (
     "EMAIL_ADDRESS_QQ",
@@ -114,12 +95,36 @@ def check_environment() -> list[str]:
     return missing
 
 
-def missing_step_files(script_dir: Path, steps: Iterable[PipelineStep]) -> list[str]:
-    missing: list[str] = []
-    for step in steps:
-        if step.required and not (script_dir / step.filename).exists():
-            missing.append(step.filename)
-    return missing
+def resolve_steps(only_step_args: list[str], all_steps: tuple[PipelineStep, ...]) -> tuple[tuple[PipelineStep, ...], list[str]]:
+    if not only_step_args:
+        return all_steps, []
+
+    requests: list[str] = []
+    for raw in only_step_args:
+        for part in raw.split(","):
+            token = part.strip()
+            if token:
+                requests.append(token)
+
+    resolved: list[PipelineStep] = []
+    invalid: list[str] = []
+    for token in requests:
+        token_lower = token.lower()
+        matched = [
+            step
+            for step in all_steps
+            if step.filename.lower() == token_lower
+            or step.filename.lower().startswith(token_lower)
+            or token_lower in step.filename.lower()
+        ]
+        if not matched:
+            invalid.append(token)
+            continue
+        for step in matched:
+            if step not in resolved:
+                resolved.append(step)
+
+    return tuple(resolved), invalid
 
 
 def resolve_steps(only_step_args: list[str], all_steps: tuple[PipelineStep, ...]) -> tuple[tuple[PipelineStep, ...], list[str]]:
@@ -193,22 +198,6 @@ def run_step(step: PipelineStep, script_dir: Path, data_dir: Path) -> tuple[bool
     return False, elapsed
 
 
-def validate_step_output(step: PipelineStep, data_dir: Path) -> tuple[bool, str]:
-    """关键步骤产物校验，防止子脚本误返回 0 导致级联失败。"""
-    if step.filename == "020 Email download.py":
-        meta_path = data_dir / "mail_meta.json"
-        stock_files = glob.glob(str(data_dir / "存量查询*.xlsx"))
-        if not meta_path.exists():
-            return False, "缺少 mail_meta.json（邮件元数据未生成）"
-        if not stock_files:
-            return False, "缺少 存量查询*.xlsx（邮件表格未导出）"
-    if step.filename == "021 Merge excel.py":
-        merged_files = glob.glob(str(data_dir / "总库存*.xlsx"))
-        if not merged_files:
-            return False, "缺少 总库存*.xlsx（合并文件未生成）"
-    return True, ""
-
-
 def _decode_subprocess_output(raw: bytes) -> str:
     """尽量兼容 Windows/跨平台编码，避免因 gbk/utf-8 不一致导致解码异常。"""
     if not raw:
@@ -246,12 +235,12 @@ def main() -> int:
     print(f"📁 数据目录：{data_dir}")
     if args.list_steps:
         print("📋 可运行步骤：")
-        for index, step in enumerate(PIPELINE_STEPS, start=1):
+        for index, step in enumerate(PRODUCTION_STEPS, start=1):
             print(f"{index:02d}. {step.filename}")
         print("🧹 清理步骤：010 clean.py（通过 --clean-only 或 --clean-after-run 启用）")
         return 0
 
-    selected_steps, invalid_steps = resolve_steps(args.only_step, PIPELINE_STEPS)
+    selected_steps, invalid_steps = resolve_steps(args.only_step, PRODUCTION_STEPS)
     if invalid_steps:
         print(f"❌ 未识别的步骤标识：{', '.join(invalid_steps)}")
         print("可先执行 `python main.py --list-steps` 查看可用步骤。")

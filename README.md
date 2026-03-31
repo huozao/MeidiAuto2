@@ -4,7 +4,12 @@
 
 ## 目录结构
 
-- `main.py`：统一编排入口，按顺序执行各子脚本。
+- `main.py`：统一编排入口，负责参数解析与调度。
+- `pipeline/`：编排层模块（步骤定义、数据模型、产物校验）。
+  - `pipeline/models.py`：步骤数据模型。
+  - `pipeline/steps.py`：生产步骤与清理步骤清单。
+  - `pipeline/validators.py`：步骤脚本存在性与关键产物校验。
+  - `pipeline/io_utils.py`：脚本共享的路径与文件发现工具。
 - `script/`：业务脚本（下载邮件、合并 Excel、计算与着色、生成 HTML、发送邮件）。
 - `.github/workflows/run-daily.yml`：标准化 CI 运行工作流（支持手动+定时）。
 - `requirements.txt`：Python 依赖。
@@ -151,7 +156,7 @@ python main.py --data-dir data-docker --stop-on-error --clean-after-run --report
 仓库已提供 `.github/workflows/run-daily.yml`，支持两种触发方式：
 
 - `workflow_dispatch`：在 Actions 页面手动点击运行；
-- `schedule`：按 cron 自动定时运行（当前配置是每天 UTC 11:00）。
+- `schedule`：按 cron 自动定时运行（当前配置是每天 UTC 00:00，即北京时间早上 08:00）。
 
 首次启用前，请在仓库 `Settings -> Secrets and variables -> Actions` 中配置：
 
@@ -202,6 +207,22 @@ python main.py --data-dir data-docker --stop-on-error --clean-after-run --report
 所以这不是“代码一定错了”，而是“代码 + 运行环境”共同决定结果。
 
 为便于排查配置问题，020/051 步骤会打印脱敏后的环境变量摘要（如邮箱打码、密码长度、收件人数），不会输出明文授权码。
+
+### 本次问题复盘（为什么这个版本恢复正常）
+
+这次能正常登录 QQ 邮箱并发送邮件，主要是因为以下几个问题被同时修复：
+
+1. **`IMAP_SERVER` 空值问题**  
+   之前 GitHub Secrets 中该值为空时，会把空字符串注入流程，导致探测报 `name or service not known`。现在 workflow 已改为：空值自动回退到 `imap.qq.com`。
+
+2. **收件人配置方式统一**  
+   收件人改为从 `RECIPIENT_EMAILS` 读取，避免脚本内硬编码与环境配置不一致。
+
+3. **邮箱步骤失败语义更明确**  
+   020 在未获取到 HTML 时会明确失败，不再“假成功”进入后续步骤，排错路径更清晰。
+
+4. **日志可观测性提升**  
+   现在会打印脱敏后的关键环境摘要（账号打码、密码长度、收件人数），便于快速判断是不是 Secrets 注入错误。
 
 ### 本地调试建议：断点 / PyCharm / Docker 怎么选
 
@@ -370,6 +391,27 @@ python main.py --check
 3. 最后保留 042（着色）与 051（发邮件）作为独立输出层。
 
 这样能保留你现在的可读性与可回滚能力，同时明显降低“脚本链条越拉越长”的维护风险。
+
+## 现在这版是否更便于维护/排错/扩展列？
+
+结论：**是的，比之前明显更好**，原因如下：
+
+1. **维护性更好**  
+   编排层已拆到 `pipeline/`（步骤定义、校验、IO 工具），不再全部堆在 `main.py`，改动边界更清晰。
+
+2. **排错更快**  
+   增加了步骤级产物校验与分步骤执行参数（`--only-step`），可以快速定位是“哪一步没产物”还是“哪一步计算异常”。
+
+3. **扩展新内容列更可控**  
+   你可以只改目标业务脚本（例如 033/041 的列映射配置），再用 `--only-step` 做小范围回归，不必每次全链路回归。
+
+建议新增列时按这个顺序：
+
+1. 在对应脚本的配置区新增列映射（优先配置化，不写死逻辑）；
+2. 增加/更新该脚本的日志打印（至少打印列名、写入行数）；
+3. 本地用 `python main.py --only-step <步骤号> --data-dir data-local` 验证；
+4. 再跑 `--dry-run` + 全链路；
+5. 最后确认 `run-report.json` 与最终 Excel 结果。
 
 ## 常见问题：出现 `Accept current/incoming/both changes` 是什么？
 
