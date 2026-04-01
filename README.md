@@ -502,3 +502,70 @@ python tools/generate_module_catalog.py --check
 2. **补齐图片生成步骤依赖声明**
    - 主流程新增 `050 image.py`（在发信前生成 `*美的*.png`）；
    - `051 Send an email.py` 明确依赖 `output.html`、`*美的*.png`、`总库存*.xlsx`。
+
+### PyCharm 新手调试指南（单步 / 串联）
+
+你可以按“先单步、再串联”的方式验证：
+
+#### A. 先做三条基础命令（推荐）
+
+```bash
+python main.py --check
+python main.py --dry-run
+python main.py --list-steps
+```
+
+- `--check`：看脚本和环境变量是否齐全；
+- `--dry-run`：只看执行顺序，不真的处理数据；
+- `--list-steps`：确认步骤列表和编号。
+
+#### B. 在 PyCharm 单独运行某个脚本
+
+以 `030 Warehousing at home.py` 为例：
+
+1. 打开 `Run -> Edit Configurations`；
+2. 新建 `Python` 配置；
+3. `Script path` 选目标脚本（如 `script/030 Warehousing at home.py`）；
+4. `Parameters` 填数据目录（如 `data-local`）；
+5. `Working directory` 设为仓库根目录；
+6. 运行并看控制台输出。
+
+> 单步运行适合排查“某一步逻辑是否正确”。
+
+#### C. 在 PyCharm 跑整条流水线（最常用）
+
+1. 新建 `Python` 配置；
+2. `Script path` 设为 `main.py`；
+3. `Parameters` 可先填：`--dry-run`；
+4. 验证通过后再改为：
+   `--data-dir data-local --stop-on-error --report-file data-local/run-report.json`
+
+> 串联运行适合验证“上下游是否衔接正确”。
+
+#### D. 我到底该“单独运行”还是“串联运行”？
+
+- **改了某个业务脚本（如 041/042）**：先单独运行该步骤，再跑整链路；
+- **改了主调度（main.py / steps.py / validators.py）**：直接跑 `--dry-run` + 整链路；
+- **不确定哪里错**：先 `--check`，再按 `--only-step` 从出错点前一两步开始回放。
+
+#### E. 常见新手坑
+
+- 忘记配置环境变量（邮箱账号/授权码/收件人）；
+- Working directory 不是仓库根目录，导致找不到 `script/` 或 `data/`；
+- 直接跑全流程，不先 `--dry-run`，排错成本高。
+
+### 最新评分与优化路线
+
+如需查看更详细的“分项评分 + P0/P1/P2 优化优先级”，请看：
+
+- `docs/ARCHITECTURE_SCORECARD.md`
+
+### P0 已落地：020 重试机制 + check 报告细化
+
+1. **020 重试机制（网络敏感步骤）**
+   - 默认对 `020 Email download.py` 启用重试（总尝试 = 1 + `--retry-count`，默认重试 2 次）；
+   - 退避等待为 `--retry-backoff * attempt` 秒（默认基值 2）。
+
+2. **check 报告细化**
+   - `python main.py --check --report-file data/check-report.json` 会输出详细结构化报告；
+   - 报告中包含每个步骤的输入/输出契约、脚本存在性、缺失环境变量和重试配置，便于远程定位问题。
