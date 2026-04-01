@@ -447,3 +447,33 @@ git push
 3. **如果 incoming 明显是旧版本（把中文日志、新参数、编码修复都删掉）：选 `Accept current change`。**
 
 针对你截图那段 `parse_args()`，通常应优先保留包含 `--clean-only` 与 `--clean-after-run` 的版本；如果另一边还有你需要的参数，就用 `Accept both` 后手工合并成一份完整参数列表。
+
+## 项目评估与维护地图（新增）
+
+为了方便后续维护者快速定位“该改哪个模块”，仓库新增了维护文档：
+
+- `docs/MAINTENANCE_MAP.md`
+
+文档包含：
+
+1. 主流程每个程序模块的功能、输入输出与依赖；
+2. 疑似冗余/历史脚本清单（以及为什么建议归档）；
+3. 日常维护时的“改哪里”速查与最小回归验证路径。
+
+建议修改代码前先读该文档再动手。
+
+### 维护表格（模块清单）自动生成
+
+如果你想长期维护“模块功能表”并避免手工维护出错，使用下面命令：
+
+```bash
+python tools/generate_module_catalog.py
+python tools/generate_module_catalog.py --check
+```
+
+说明：
+- 源数据：`docs/module_catalog.json`
+- 自动产物：
+  - `docs/MODULE_CATALOG.md`（给人看）
+  - `docs/module_catalog.csv`（给表格工具/二次分析用）
+- `--check` 适合在 CI 中做“文档是否过期”校验。
