@@ -154,23 +154,34 @@ def _load_step_module(script_path: Path):
     module_name = f"step_{script_path.stem.replace(" ", "_")}_{abs(hash(script_path))}"
     spec = importlib.util.spec_from_file_location(module_name, script_path)
     if spec is None or spec.loader is None:
-        return None
+        return None, "无法创建模块加载器"
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    try:
+        spec.loader.exec_module(module)
+    except Exception as exc:
+        return None, f"模块加载失败: {exc}"
+    return module, ""
 
 
 def _run_step_in_process(script_path: Path, data_dir: Path) -> tuple[int, str]:
-    module = _load_step_module(script_path)
-    if module is None or not hasattr(module, "main"):
-        return 127, ""
+    module, load_msg = _load_step_module(script_path)
+    if module is None:
+        return 1, load_msg
+    if not hasattr(module, "main"):
+        return 127, "缺少 main() 入口"
 
     main_func = getattr(module, "main")
+    argv = [str(script_path), str(data_dir)]
+    old_argv = sys.argv
+    sys.argv = argv
     try:
-        # 优先尝试 main([script, data_dir])，失败再回退 main()
-        result = main_func([str(script_path), str(data_dir)])
-    except TypeError:
-        result = main_func()
+        # 优先尝试 main(argv)，失败再回退 main()
+        try:
+            result = main_func(argv)
+        except TypeError:
+            result = main_func()
+    finally:
+        sys.argv = old_argv
 
     if result is None:
         return 0, ""
@@ -202,7 +213,9 @@ def run_step(step: PipelineStep, script_dir: Path, data_dir: Path, retry_count: 
         print(f"\n🚀 正在运行：{' '.join(cmd)}（尝试 {attempt}/{attempts}）")
         started = time.time()
         if step.filename in in_process_steps:
-            return_code, _ = _run_step_in_process(script_path, data_dir)
+            return_code, in_process_msg = _run_step_in_process(script_path, data_dir)
+            if in_process_msg:
+                print(f"⚠️ 进程内执行提示: {in_process_msg}")
             elapsed = time.time() - started
             total_elapsed += elapsed
             if return_code == 0:
