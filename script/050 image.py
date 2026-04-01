@@ -23,10 +23,14 @@ for name in CANDIDATE_FONTS:
         continue
 
 
-def resolve_inventory_folder() -> str:
+def resolve_inventory_folder(argv: list[str] | None = None) -> str:
     default_inventory_folder = os.path.abspath(os.path.join(os.getcwd(), "data"))
-    if len(sys.argv) >= 2:
-        inventory_folder = sys.argv[1]
+    argv = argv or sys.argv
+
+    # 兼容 argv 中混入参数标记（例如 --data-dir）
+    positional = [item for item in argv[1:] if not item.startswith("-")]
+    if positional:
+        inventory_folder = positional[-1]
         print(f"✅ 使用传入路径: {inventory_folder}")
     else:
         inventory_folder = default_inventory_folder
@@ -181,8 +185,8 @@ def render_table_image(data, txt_colors, bg_colors, col_widths, output_path: str
     plt.close(fig)
 
 
-def main() -> int:
-    folder = resolve_inventory_folder()
+def main(argv: list[str] | None = None) -> int:
+    folder = resolve_inventory_folder(argv or sys.argv)
     latest_file = pick_inventory_file(folder)
 
     wb = load_workbook(latest_file, data_only=False)
