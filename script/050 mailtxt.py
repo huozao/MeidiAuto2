@@ -264,7 +264,9 @@ def save_output_to_file(html_content, output_dir):
 # ================================
 # 主函数
 # ================================
-def main():
+def main(argv: list[str] | None = None) -> int:
+    if argv is not None:
+        sys.argv = argv
     inventory_folder = get_inventory_folder()
     inventory_file = find_excel_file(inventory_folder)
     sheet = load_worksheet(inventory_file)
@@ -286,7 +288,8 @@ def main():
     save_output_to_file(html_content, inventory_folder)
     print("✅ 红色或紫色单元格数量：", len(colored_rows))
     print("📌 行号列表：", colored_rows)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
