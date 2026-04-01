@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import importlib.util
 import json
 import os
 import subprocess
@@ -17,7 +18,7 @@ from pathlib import Path
 
 from pipeline.models import PipelineStep
 from pipeline.steps import CLEANUP_STEP, PRODUCTION_STEPS
-from pipeline.validators import missing_step_files, validate_step_output
+from pipeline.validators import missing_step_files, validate_step_inputs, validate_step_output
 
 
 REQUIRED_ENV_KEYS: tuple[str, ...] = (
@@ -25,6 +26,11 @@ REQUIRED_ENV_KEYS: tuple[str, ...] = (
     "EMAIL_PASSWORD_QQ|EMAIL_PASSWOR_QQ",
     "RECIPIENT_EMAILS",
 )
+
+RETRYABLE_STEPS: tuple[str, ...] = ("020 Email download.py",)
+DEFAULT_RETRY_COUNT = 2
+DEFAULT_RETRY_BACKOFF_SECONDS = 2
+DEFAULT_IN_PROCESS_STEPS: tuple[str, ...] = ("050 image.py", "050 mailtxt.py", "051 Send an email.py")
 
 
 def parse_args() -> argparse.Namespace:
@@ -80,6 +86,23 @@ def parse_args() -> argparse.Namespace:
         default=[],
         help="仅运行指定步骤（可重复；可填完整文件名、编号前缀或关键字，如 030 / '041 operation.py'）",
     )
+    parser.add_argument(
+        "--retry-count",
+        type=int,
+        default=DEFAULT_RETRY_COUNT,
+        help="失败重试次数（仅对网络敏感步骤生效，默认：2）",
+    )
+    parser.add_argument(
+        "--retry-backoff",
+        type=int,
+        default=DEFAULT_RETRY_BACKOFF_SECONDS,
+        help="重试退避秒数基值（默认：2；第n次等待 base*n 秒）",
+    )
+    parser.add_argument(
+        "--in-process-steps",
+        default=",".join(DEFAULT_IN_PROCESS_STEPS),
+        help="逗号分隔：以进程内函数方式执行的步骤列表（默认包含 050/051）",
+    )
     return parser.parse_args()
 
 
@@ -127,7 +150,47 @@ def resolve_steps(only_step_args: list[str], all_steps: tuple[PipelineStep, ...]
     return tuple(resolved), invalid
 
 
-def run_step(step: PipelineStep, script_dir: Path, data_dir: Path) -> tuple[bool, float]:
+def _load_step_module(script_path: Path):
+    module_name = f"step_{script_path.stem.replace(" ", "_")}_{abs(hash(script_path))}"
+    spec = importlib.util.spec_from_file_location(module_name, script_path)
+    if spec is None or spec.loader is None:
+        return None, "无法创建模块加载器"
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    except Exception as exc:
+        return None, f"模块加载失败: {exc}"
+    return module, ""
+
+
+def _run_step_in_process(script_path: Path, data_dir: Path) -> tuple[int, str]:
+    module, load_msg = _load_step_module(script_path)
+    if module is None:
+        return 1, load_msg
+    if not hasattr(module, "main"):
+        return 127, "缺少 main() 入口"
+
+    main_func = getattr(module, "main")
+    argv = [str(script_path), str(data_dir)]
+    old_argv = sys.argv
+    sys.argv = argv
+    try:
+        # 优先尝试 main(argv)，失败再回退 main()
+        try:
+            result = main_func(argv)
+        except TypeError:
+            result = main_func()
+    finally:
+        sys.argv = old_argv
+
+    if result is None:
+        return 0, ""
+    if isinstance(result, int):
+        return result, ""
+    return 0, ""
+
+
+def run_step(step: PipelineStep, script_dir: Path, data_dir: Path, retry_count: int = DEFAULT_RETRY_COUNT, retry_backoff: int = DEFAULT_RETRY_BACKOFF_SECONDS, in_process_steps: frozenset[str] = frozenset()) -> tuple[bool, float]:
     script_path = script_dir / step.filename
     if not script_path.exists():
         msg = f"❌ 缺少步骤脚本：{script_path}"
@@ -137,33 +200,60 @@ def run_step(step: PipelineStep, script_dir: Path, data_dir: Path) -> tuple[bool
         print(f"⚠️ {msg}（可选步骤，已跳过）")
         return True, 0.0
 
+    input_ok, input_msg = validate_step_inputs(step, data_dir)
+    if not input_ok:
+        print(f"❌ {step.filename} 输入校验失败：{input_msg}")
+        return False, 0.0
+
     cmd = [sys.executable, str(script_path), str(data_dir)]
-    print(f"\n🚀 正在运行：{' '.join(cmd)}")
-    started = time.time()
-    env = os.environ.copy()
-    env.setdefault("PYTHONIOENCODING", "utf-8")
-    env.setdefault("PYTHONUTF8", "1")
-    completed = subprocess.run(cmd, capture_output=True, text=False, env=env)
-    elapsed = time.time() - started
+    attempts = 1 + (max(0, retry_count) if step.filename in RETRYABLE_STEPS else 0)
+    total_elapsed = 0.0
 
-    stdout_text = _decode_subprocess_output(completed.stdout)
-    stderr_text = _decode_subprocess_output(completed.stderr)
+    for attempt in range(1, attempts + 1):
+        print(f"\n🚀 正在运行：{' '.join(cmd)}（尝试 {attempt}/{attempts}）")
+        started = time.time()
+        if step.filename in in_process_steps:
+            return_code, in_process_msg = _run_step_in_process(script_path, data_dir)
+            if in_process_msg:
+                print(f"⚠️ 进程内执行提示: {in_process_msg}")
+            elapsed = time.time() - started
+            total_elapsed += elapsed
+            if return_code == 0:
+                completed_returncode = 0
+            else:
+                completed_returncode = return_code
+        else:
+            env = os.environ.copy()
+            env.setdefault("PYTHONIOENCODING", "utf-8")
+            env.setdefault("PYTHONUTF8", "1")
+            completed = subprocess.run(cmd, capture_output=True, text=False, env=env)
+            elapsed = time.time() - started
+            total_elapsed += elapsed
 
-    if stdout_text:
-        print(stdout_text)
-    if stderr_text:
-        print(stderr_text)
+            stdout_text = _decode_subprocess_output(completed.stdout)
+            stderr_text = _decode_subprocess_output(completed.stderr)
 
-    if completed.returncode == 0:
-        output_ok, output_msg = validate_step_output(step, data_dir)
-        if not output_ok:
-            print(f"❌ {step.filename} 输出校验失败：{output_msg}")
-            return False, elapsed
-        print(f"✅ {step.filename} 执行完成，用时 {elapsed:.2f}s")
-        return True, elapsed
+            if stdout_text:
+                print(stdout_text)
+            if stderr_text:
+                print(stderr_text)
+            completed_returncode = completed.returncode
 
-    print(f"❌ {step.filename} 执行失败（退出码={completed.returncode}），用时 {elapsed:.2f}s")
-    return False, elapsed
+        if completed_returncode == 0:
+            output_ok, output_msg = validate_step_output(step, data_dir)
+            if not output_ok:
+                print(f"❌ {step.filename} 输出校验失败：{output_msg}")
+                return False, total_elapsed
+            print(f"✅ {step.filename} 执行完成，用时 {total_elapsed:.2f}s")
+            return True, total_elapsed
+
+        print(f"❌ {step.filename} 执行失败（退出码={completed_returncode}），本次用时 {elapsed:.2f}s")
+        if attempt < attempts:
+            wait_seconds = max(1, retry_backoff * attempt)
+            print(f"🔁 {step.filename} 将在 {wait_seconds}s 后重试...")
+            time.sleep(wait_seconds)
+
+    return False, total_elapsed
 
 
 def _decode_subprocess_output(raw: bytes) -> str:
@@ -191,6 +281,8 @@ def write_report(report_file: str, payload: dict, root: Path) -> None:
 
 def main() -> int:
     args = parse_args()
+    in_process_steps = frozenset([item.strip() for item in args.in_process_steps.split(",") if item.strip()])
+
     if args.clean_only and args.clean_after_run:
         print("❌ 参数冲突：--clean-only 与 --clean-after-run 不能同时使用。")
         return 2
@@ -257,10 +349,39 @@ def main() -> int:
         else:
             print("✅ 必需环境变量已就绪。")
 
+        check_details = {
+            "step_contracts": [
+                {
+                    "filename": step.filename,
+                    "required": step.required,
+                    "input_patterns": list(step.input_patterns),
+                    "output_patterns": list(step.output_patterns),
+                    "script_exists": (script_dir / step.filename).exists(),
+                }
+                for step in steps_to_check
+            ],
+            "missing_step_files": missing_files,
+            "missing_env": missing_env,
+            "retry": {
+                "retryable_steps": list(RETRYABLE_STEPS),
+                "retry_count": args.retry_count,
+                "retry_backoff": args.retry_backoff,
+            },
+        }
+        write_report(
+            args.report_file,
+            {
+                "mode": "check",
+                "success": not missing_files,
+                "details": check_details,
+            },
+            root,
+        )
+
         return 0 if not missing_files else 1
 
     if args.clean_only:
-        ok, _ = run_step(CLEANUP_STEP, script_dir, data_dir)
+        ok, _ = run_step(CLEANUP_STEP, script_dir, data_dir, args.retry_count, args.retry_backoff, in_process_steps)
         if ok:
             print("🧹 清理任务执行完成。")
             return 0
@@ -274,7 +395,7 @@ def main() -> int:
     started_at = time.strftime("%Y-%m-%d %H:%M:%S")
 
     for step in selected_steps:
-        ok, elapsed = run_step(step, script_dir, data_dir)
+        ok, elapsed = run_step(step, script_dir, data_dir, args.retry_count, args.retry_backoff, in_process_steps)
         total_time += elapsed
         if not ok:
             failures.append(step.filename)
@@ -283,7 +404,7 @@ def main() -> int:
 
     if args.clean_after_run:
         print("\n🧹 开始执行收尾清理（010 clean.py）...")
-        clean_ok, clean_elapsed = run_step(CLEANUP_STEP, script_dir, data_dir)
+        clean_ok, clean_elapsed = run_step(CLEANUP_STEP, script_dir, data_dir, args.retry_count, args.retry_backoff, in_process_steps)
         total_time += clean_elapsed
         if not clean_ok:
             failures.append(CLEANUP_STEP.filename)
