@@ -477,3 +477,15 @@ python tools/generate_module_catalog.py --check
   - `docs/MODULE_CATALOG.md`（给人看）
   - `docs/module_catalog.csv`（给表格工具/二次分析用）
 - `--check` 适合在 CI 中做“文档是否过期”校验。
+
+### 结构评分与优化建议（2026-04-01）
+
+当前“主程序串联子程序”结构评分：**7.5 / 10**。
+
+优点：
+- `main.py` 统一调度、支持 `--check/--dry-run/--only-step`；
+- 步骤顺序集中在 `pipeline/steps.py`，可维护性较早期脚本串联方式更好。
+
+主要可优化点：
+- 步骤间通过文件传递数据，耦合仍偏高（建议中期演进为 Python 函数化调用 + 统一上下文对象）；
+- 目前 `051 Send an email.py` 依赖图片文件，但主流程没有显式“生成图片”步骤，建议补充可选步骤并在校验层声明其依赖。

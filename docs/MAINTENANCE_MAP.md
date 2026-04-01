@@ -31,22 +31,21 @@
 
 ---
 
-## 3) 疑似冗余 / 历史脚本（建议分层管理）
+## 3) 冗余脚本处理结果（已执行删除）
 
-这些脚本**不在** `pipeline/steps.py` 的主流程里，存在重复能力、硬编码路径或平台依赖，可归档到 `script/legacy/`：
+以下历史/弱关联脚本已从仓库删除，以降低维护噪音：
 
-1. `script/main local.py`
-   - 与 `main.py` 功能重复；且引用 `052 send email.py`（仓库里不存在），存在失效风险。
-2. `script/企业消息整理.py`
-   - 与 `script/050 mailtxt.py` 逻辑高度重叠（同为读取库存并汇总可发消息）。
-3. `script/050 image local.py`
-   - 与 `script/050 image.py` 同为“导出图片”；但依赖 `xlwings + ImageGrab`，更偏 Windows 本地交互环境。
-4. `script/月汇总.py`、`script/月汇总绘图.py`、`script/统一格式.py`
-   - 偏离日常流水线，且包含本地绝对路径，适合作为“分析工具脚本”而非生产步骤。
-5. `script/sync_env_to_github.py`
-   - 运维辅助脚本，不应进入生产流水线；建议单独放 `tools/ops/`。
-6. 顶层 `多网站.py`、`chek.py`
-   - 与库存流水线主业务关联弱，建议独立仓库或至少移动到 `tools/misc/`。
+- `script/main local.py`
+- `script/企业消息整理.py`
+- `script/050 image local.py`
+- `script/月汇总.py`
+- `script/月汇总绘图.py`
+- `script/统一格式.py`
+- `script/sync_env_to_github.py`
+- `多网站.py`
+- `chek.py`
+
+删除依据：与主流程重复、平台依赖强、或与库存主业务弱关联。
 
 ---
 

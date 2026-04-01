@@ -21,12 +21,3 @@
 
 | 文件 | 状态 | 说明 |
 |---|---|---|
-| `script/main local.py` | 建议归档 | 与main.py调度能力重复且引用缺失脚本052 send email.py |
-| `script/企业消息整理.py` | 建议合并 | 与050 mailtxt.py功能重叠 |
-| `script/050 image local.py` | 平台受限 | 依赖xlwings/ImageGrab, 更偏Windows本地环境 |
-| `script/月汇总.py` | 分析工具 | 非主流水线, 包含本地绝对路径 |
-| `script/月汇总绘图.py` | 分析工具 | 非主流水线, 包含本地绝对路径 |
-| `script/统一格式.py` | 一次性工具 | 用于批量改代码格式, 不应纳入生产流程 |
-| `script/sync_env_to_github.py` | 运维工具 | 仅用于Secrets同步 |
-| `多网站.py` | 弱关联 | 与库存主流程业务无关 |
-| `chek.py` | 弱关联 | 仅检查git仓库映射关系 |

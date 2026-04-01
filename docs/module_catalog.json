@@ -81,51 +81,5 @@
       "outputs": "清理结果日志"
     }
   ],
-  "legacy_or_tooling_modules": [
-    {
-      "file": "script/main local.py",
-      "status": "建议归档",
-      "reason": "与main.py调度能力重复且引用缺失脚本052 send email.py"
-    },
-    {
-      "file": "script/企业消息整理.py",
-      "status": "建议合并",
-      "reason": "与050 mailtxt.py功能重叠"
-    },
-    {
-      "file": "script/050 image local.py",
-      "status": "平台受限",
-      "reason": "依赖xlwings/ImageGrab, 更偏Windows本地环境"
-    },
-    {
-      "file": "script/月汇总.py",
-      "status": "分析工具",
-      "reason": "非主流水线, 包含本地绝对路径"
-    },
-    {
-      "file": "script/月汇总绘图.py",
-      "status": "分析工具",
-      "reason": "非主流水线, 包含本地绝对路径"
-    },
-    {
-      "file": "script/统一格式.py",
-      "status": "一次性工具",
-      "reason": "用于批量改代码格式, 不应纳入生产流程"
-    },
-    {
-      "file": "script/sync_env_to_github.py",
-      "status": "运维工具",
-      "reason": "仅用于Secrets同步"
-    },
-    {
-      "file": "多网站.py",
-      "status": "弱关联",
-      "reason": "与库存主流程业务无关"
-    },
-    {
-      "file": "chek.py",
-      "status": "弱关联",
-      "reason": "仅检查git仓库映射关系"
-    }
-  ]
+  "legacy_or_tooling_modules": []
 }
