@@ -13,7 +13,8 @@
 | 033 | `script/033 list insertion.py` | 计划回填 | 将需求表数据写入库存关键列并统一格式 | script/data/list.xlsx, 总库存*.xlsx | 更新后的总库存*.xlsx |
 | 041 | `script/041 operation.py` | 计算汇总 | 计算最小发货/排产/月计划缺口与合计 | 总库存*.xlsx | 更新后的总库存*.xlsx |
 | 042 | `script/042 Color display.py` | 可视化标记 | 按业务阈值对库存表着色 | 总库存*.xlsx | 更新后的总库存*.xlsx |
-| 050 | `script/050 mailtxt.py` | 消息生成 | 生成邮件HTML正文 | 总库存*.xlsx | output.html |
+| 050A | `script/050 image.py` | 消息素材 | 将库存表导出为邮件图片附件 | 总库存*.xlsx | *美的*.png |
+| 050B | `script/050 mailtxt.py` | 消息生成 | 生成邮件HTML正文 | 总库存*.xlsx | output.html |
 | 051 | `script/051 Send an email.py` | 消息发送 | 发送邮件并附带HTML/图片/Excel | output.html, *美的*.png, 总库存*.xlsx | 邮件发送结果 |
 | clean | `script/010 clean.py` | 清理 | 清理中间产物与冗余文件 | data目录 | 清理结果日志 |
 

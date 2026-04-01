@@ -15,18 +15,20 @@ def missing_step_files(script_dir: Path, steps: Iterable[PipelineStep]) -> list[
     return missing
 
 
-def validate_step_output(step: PipelineStep, data_dir: Path) -> tuple[bool, str]:
-    """关键步骤产物校验，防止子脚本误返回 0 导致级联失败。"""
-    if step.filename == "020 Email download.py":
-        meta_path = data_dir / "mail_meta.json"
-        stock_files = glob.glob(str(data_dir / "存量查询*.xlsx"))
-        if not meta_path.exists():
-            return False, "缺少 mail_meta.json（邮件元数据未生成）"
-        if not stock_files:
-            return False, "缺少 存量查询*.xlsx（邮件表格未导出）"
-    if step.filename == "021 Merge excel.py":
-        merged_files = glob.glob(str(data_dir / "总库存*.xlsx"))
-        if not merged_files:
-            return False, "缺少 总库存*.xlsx（合并文件未生成）"
+def _find_matches(data_dir: Path, pattern: str) -> list[str]:
+    return glob.glob(str(data_dir / pattern))
+
+
+def validate_step_inputs(step: PipelineStep, data_dir: Path) -> tuple[bool, str]:
+    for pattern in step.input_patterns:
+        if not _find_matches(data_dir, pattern):
+            return False, f"缺少输入产物：{pattern}"
     return True, ""
 
+
+def validate_step_output(step: PipelineStep, data_dir: Path) -> tuple[bool, str]:
+    """关键步骤产物校验，防止子脚本误返回 0 导致级联失败。"""
+    for pattern in step.output_patterns:
+        if not _find_matches(data_dir, pattern):
+            return False, f"缺少输出产物：{pattern}"
+    return True, ""

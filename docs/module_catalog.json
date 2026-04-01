@@ -57,7 +57,15 @@
       "outputs": "更新后的总库存*.xlsx"
     },
     {
-      "step": "050",
+      "step": "050A",
+      "file": "script/050 image.py",
+      "category": "消息素材",
+      "purpose": "将库存表导出为邮件图片附件",
+      "inputs": "总库存*.xlsx",
+      "outputs": "*美的*.png"
+    },
+    {
+      "step": "050B",
       "file": "script/050 mailtxt.py",
       "category": "消息生成",
       "purpose": "生成邮件HTML正文",

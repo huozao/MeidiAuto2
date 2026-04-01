@@ -480,7 +480,7 @@ python tools/generate_module_catalog.py --check
 
 ### 结构评分与优化建议（2026-04-01）
 
-当前“主程序串联子程序”结构评分：**7.5 / 10**。
+当前“主程序串联子程序”结构评分：**8.0 / 10**（已完成中期优化第一阶段）。
 
 优点：
 - `main.py` 统一调度、支持 `--check/--dry-run/--only-step`；
@@ -489,3 +489,16 @@ python tools/generate_module_catalog.py --check
 主要可优化点：
 - 步骤间通过文件传递数据，耦合仍偏高（建议中期演进为 Python 函数化调用 + 统一上下文对象）；
 - 目前 `051 Send an email.py` 依赖图片文件，但主流程没有显式“生成图片”步骤，建议补充可选步骤并在校验层声明其依赖。
+
+### 中期优化（已开始）
+
+本轮已落地两项结构优化：
+
+1. **减少步骤间文件耦合（契约化）**
+   - `pipeline/steps.py` 为每个步骤声明 `input_patterns` / `output_patterns`；
+   - `main.py` 在执行前做输入校验，在执行后做输出校验；
+   - `pipeline/validators.py` 统一校验逻辑，减少脚本内散落的隐式依赖。
+
+2. **补齐图片生成步骤依赖声明**
+   - 主流程新增 `050 image.py`（在发信前生成 `*美的*.png`）；
+   - `051 Send an email.py` 明确依赖 `output.html`、`*美的*.png`、`总库存*.xlsx`。

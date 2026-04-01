@@ -13,7 +13,8 @@
 | 033 | `script/033 list insertion.py` | 从需求表写入 K/N/P/T 列并统一格式 | `script/data/list.xlsx`、`总库存*.xlsx` | 更新后的 `总库存*.xlsx` | 依赖固定需求模板 |
 | 041 | `script/041 operation.py` | 计算最小发货/排产/月计划缺口，并写合计 | `总库存*.xlsx` | 更新后的 `总库存*.xlsx` | 列名敏感，改表头需同步 |
 | 042 | `script/042 Color display.py` | 按业务规则给库存表着色（深色+淡色扩展） | `总库存*.xlsx` | 更新后的 `总库存*.xlsx` | 规则可配置 |
-| 050 | `script/050 mailtxt.py` | 生成邮件正文 HTML（包含异常行等） | `总库存*.xlsx` | `output.html` | 供 051 发送 |
+| 050A | `script/050 image.py` | 生成邮件图片附件（*美的*.png） | `总库存*.xlsx` | `*美的*.png` | 为 051 提供图片依赖 |
+| 050B | `script/050 mailtxt.py` | 生成邮件正文 HTML（包含异常行等） | `总库存*.xlsx` | `output.html` | 供 051 发送 |
 | 051 | `script/051 Send an email.py` | 读取 HTML / 图片 / Excel 并发送邮件 | `output.html`、`*美的*.png`、`总库存*.xlsx` | 外发邮件 | 终端动作 |
 | clean | `script/010 clean.py` | 清理中间产物（支持 data/script/data） | 数据目录 | 删除冗余文件 | 可独立执行 |
 
