@@ -586,3 +586,5 @@ python main.py --list-steps
 > 修复说明：进程内执行步骤时会显式注入 `sys.argv=[script_path, data_dir]`，避免脚本误读取主程序参数（如 `--data-dir`）导致路径解析错误。
 
 > GitHub Actions 修复：`050 image.py` 现在会忽略 `--data-dir` 这类参数标记，自动提取最后一个有效路径参数，避免把 `--data-dir` 误当成目录名。
+
+> 邮件图片样式优化：`050 image.py` 已改为“美化版表格渲染”（分层表头 + 斑马纹 + 轻网格 + 原始高亮色覆盖），优先保证邮件端可读性。

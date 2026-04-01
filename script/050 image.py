@@ -147,11 +147,11 @@ def render_table_image(data, txt_colors, bg_colors, col_widths, output_path: str
         print("❌ 没有可渲染的数据")
         raise SystemExit(1)
 
-    # 第二阶段优化：按有效区自动裁剪后再渲染
-    fig_w = max(20, ncols * 1.35)
-    fig_h = max(10, nrows * 0.50)
+    # 美化版：更宽松的网格、分层表头、交替底色
+    fig_w = max(20, ncols * 1.45)
+    fig_h = max(10, nrows * 0.52)
 
-    fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=220)
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=230)
     ax.axis("off")
 
     table = ax.table(cellText=data, cellLoc="center", loc="center")
@@ -165,7 +165,21 @@ def render_table_image(data, txt_colors, bg_colors, col_widths, output_path: str
             cell = table[r, c]
             cell.set_width((col_widths[c] / total) * 0.98)
             cell.set_height(0.98 / nrows)
-            cell.set_linewidth(0.8)
+            cell.set_linewidth(0.45)
+
+            # 表头行（1~4行）加粗并灰底
+            if r <= 3:
+                cell.get_text().set_fontweight("bold")
+                if r == 3:
+                    cell.set_facecolor("#EFEFEF")
+                else:
+                    cell.set_facecolor("#F7F7F7")
+            else:
+                # 普通数据行做斑马纹，提升可读性
+                if r % 2 == 0:
+                    cell.set_facecolor("#FCFCFC")
+                else:
+                    cell.set_facecolor("#FFFFFF")
 
             fg = txt_colors[r][c]
             if fg and fg != "000000":
@@ -174,6 +188,7 @@ def render_table_image(data, txt_colors, bg_colors, col_widths, output_path: str
                 except Exception:
                     pass
 
+            # Excel 原始填色优先（覆盖斑马纹）
             bg = bg_colors[r][c]
             if bg and bg not in ("000000", "FFFFFF"):
                 try:
@@ -181,7 +196,13 @@ def render_table_image(data, txt_colors, bg_colors, col_widths, output_path: str
                 except Exception:
                     pass
 
-    fig.savefig(output_path, bbox_inches="tight", pad_inches=0.04)
+            # 简单对齐：前4列偏左，其余偏中/右
+            if c <= 3:
+                cell.get_text().set_ha("left")
+            elif c >= 6:
+                cell.get_text().set_ha("right")
+
+    fig.savefig(output_path, bbox_inches="tight", pad_inches=0.03)
     plt.close(fig)
 
 
