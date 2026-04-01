@@ -447,3 +447,58 @@ git push
 3. **如果 incoming 明显是旧版本（把中文日志、新参数、编码修复都删掉）：选 `Accept current change`。**
 
 针对你截图那段 `parse_args()`，通常应优先保留包含 `--clean-only` 与 `--clean-after-run` 的版本；如果另一边还有你需要的参数，就用 `Accept both` 后手工合并成一份完整参数列表。
+
+## 项目评估与维护地图（新增）
+
+为了方便后续维护者快速定位“该改哪个模块”，仓库新增了维护文档：
+
+- `docs/MAINTENANCE_MAP.md`
+
+文档包含：
+
+1. 主流程每个程序模块的功能、输入输出与依赖；
+2. 疑似冗余/历史脚本清单（以及为什么建议归档）；
+3. 日常维护时的“改哪里”速查与最小回归验证路径。
+
+建议修改代码前先读该文档再动手。
+
+### 维护表格（模块清单）自动生成
+
+如果你想长期维护“模块功能表”并避免手工维护出错，使用下面命令：
+
+```bash
+python tools/generate_module_catalog.py
+python tools/generate_module_catalog.py --check
+```
+
+说明：
+- 源数据：`docs/module_catalog.json`
+- 自动产物：
+  - `docs/MODULE_CATALOG.md`（给人看）
+  - `docs/module_catalog.csv`（给表格工具/二次分析用）
+- `--check` 适合在 CI 中做“文档是否过期”校验。
+
+### 结构评分与优化建议（2026-04-01）
+
+当前“主程序串联子程序”结构评分：**8.0 / 10**（已完成中期优化第一阶段）。
+
+优点：
+- `main.py` 统一调度、支持 `--check/--dry-run/--only-step`；
+- 步骤顺序集中在 `pipeline/steps.py`，可维护性较早期脚本串联方式更好。
+
+主要可优化点：
+- 步骤间通过文件传递数据，耦合仍偏高（建议中期演进为 Python 函数化调用 + 统一上下文对象）；
+- 目前 `051 Send an email.py` 依赖图片文件，但主流程没有显式“生成图片”步骤，建议补充可选步骤并在校验层声明其依赖。
+
+### 中期优化（已开始）
+
+本轮已落地两项结构优化：
+
+1. **减少步骤间文件耦合（契约化）**
+   - `pipeline/steps.py` 为每个步骤声明 `input_patterns` / `output_patterns`；
+   - `main.py` 在执行前做输入校验，在执行后做输出校验；
+   - `pipeline/validators.py` 统一校验逻辑，减少脚本内散落的隐式依赖。
+
+2. **补齐图片生成步骤依赖声明**
+   - 主流程新增 `050 image.py`（在发信前生成 `*美的*.png`）；
+   - `051 Send an email.py` 明确依赖 `output.html`、`*美的*.png`、`总库存*.xlsx`。

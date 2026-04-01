@@ -17,7 +17,7 @@ from pathlib import Path
 
 from pipeline.models import PipelineStep
 from pipeline.steps import CLEANUP_STEP, PRODUCTION_STEPS
-from pipeline.validators import missing_step_files, validate_step_output
+from pipeline.validators import missing_step_files, validate_step_inputs, validate_step_output
 
 
 REQUIRED_ENV_KEYS: tuple[str, ...] = (
@@ -136,6 +136,11 @@ def run_step(step: PipelineStep, script_dir: Path, data_dir: Path) -> tuple[bool
             return False, 0.0
         print(f"⚠️ {msg}（可选步骤，已跳过）")
         return True, 0.0
+
+    input_ok, input_msg = validate_step_inputs(step, data_dir)
+    if not input_ok:
+        print(f"❌ {step.filename} 输入校验失败：{input_msg}")
+        return False, 0.0
 
     cmd = [sys.executable, str(script_path), str(data_dir)]
     print(f"\n🚀 正在运行：{' '.join(cmd)}")
