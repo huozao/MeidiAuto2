@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import importlib.util
 import json
 import os
 import subprocess
@@ -29,6 +30,7 @@ REQUIRED_ENV_KEYS: tuple[str, ...] = (
 RETRYABLE_STEPS: tuple[str, ...] = ("020 Email download.py",)
 DEFAULT_RETRY_COUNT = 2
 DEFAULT_RETRY_BACKOFF_SECONDS = 2
+DEFAULT_IN_PROCESS_STEPS: tuple[str, ...] = ("050 image.py", "050 mailtxt.py", "051 Send an email.py")
 
 
 def parse_args() -> argparse.Namespace:
@@ -96,6 +98,11 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_RETRY_BACKOFF_SECONDS,
         help="重试退避秒数基值（默认：2；第n次等待 base*n 秒）",
     )
+    parser.add_argument(
+        "--in-process-steps",
+        default=",".join(DEFAULT_IN_PROCESS_STEPS),
+        help="逗号分隔：以进程内函数方式执行的步骤列表（默认包含 050/051）",
+    )
     return parser.parse_args()
 
 
@@ -143,7 +150,36 @@ def resolve_steps(only_step_args: list[str], all_steps: tuple[PipelineStep, ...]
     return tuple(resolved), invalid
 
 
-def run_step(step: PipelineStep, script_dir: Path, data_dir: Path, retry_count: int = DEFAULT_RETRY_COUNT, retry_backoff: int = DEFAULT_RETRY_BACKOFF_SECONDS) -> tuple[bool, float]:
+def _load_step_module(script_path: Path):
+    module_name = f"step_{script_path.stem.replace(" ", "_")}_{abs(hash(script_path))}"
+    spec = importlib.util.spec_from_file_location(module_name, script_path)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _run_step_in_process(script_path: Path, data_dir: Path) -> tuple[int, str]:
+    module = _load_step_module(script_path)
+    if module is None or not hasattr(module, "main"):
+        return 127, ""
+
+    main_func = getattr(module, "main")
+    try:
+        # 优先尝试 main([script, data_dir])，失败再回退 main()
+        result = main_func([str(script_path), str(data_dir)])
+    except TypeError:
+        result = main_func()
+
+    if result is None:
+        return 0, ""
+    if isinstance(result, int):
+        return result, ""
+    return 0, ""
+
+
+def run_step(step: PipelineStep, script_dir: Path, data_dir: Path, retry_count: int = DEFAULT_RETRY_COUNT, retry_backoff: int = DEFAULT_RETRY_BACKOFF_SECONDS, in_process_steps: frozenset[str] = frozenset()) -> tuple[bool, float]:
     script_path = script_dir / step.filename
     if not script_path.exists():
         msg = f"❌ 缺少步骤脚本：{script_path}"
@@ -165,22 +201,32 @@ def run_step(step: PipelineStep, script_dir: Path, data_dir: Path, retry_count: 
     for attempt in range(1, attempts + 1):
         print(f"\n🚀 正在运行：{' '.join(cmd)}（尝试 {attempt}/{attempts}）")
         started = time.time()
-        env = os.environ.copy()
-        env.setdefault("PYTHONIOENCODING", "utf-8")
-        env.setdefault("PYTHONUTF8", "1")
-        completed = subprocess.run(cmd, capture_output=True, text=False, env=env)
-        elapsed = time.time() - started
-        total_elapsed += elapsed
+        if step.filename in in_process_steps:
+            return_code, _ = _run_step_in_process(script_path, data_dir)
+            elapsed = time.time() - started
+            total_elapsed += elapsed
+            if return_code == 0:
+                completed_returncode = 0
+            else:
+                completed_returncode = return_code
+        else:
+            env = os.environ.copy()
+            env.setdefault("PYTHONIOENCODING", "utf-8")
+            env.setdefault("PYTHONUTF8", "1")
+            completed = subprocess.run(cmd, capture_output=True, text=False, env=env)
+            elapsed = time.time() - started
+            total_elapsed += elapsed
 
-        stdout_text = _decode_subprocess_output(completed.stdout)
-        stderr_text = _decode_subprocess_output(completed.stderr)
+            stdout_text = _decode_subprocess_output(completed.stdout)
+            stderr_text = _decode_subprocess_output(completed.stderr)
 
-        if stdout_text:
-            print(stdout_text)
-        if stderr_text:
-            print(stderr_text)
+            if stdout_text:
+                print(stdout_text)
+            if stderr_text:
+                print(stderr_text)
+            completed_returncode = completed.returncode
 
-        if completed.returncode == 0:
+        if completed_returncode == 0:
             output_ok, output_msg = validate_step_output(step, data_dir)
             if not output_ok:
                 print(f"❌ {step.filename} 输出校验失败：{output_msg}")
@@ -188,7 +234,7 @@ def run_step(step: PipelineStep, script_dir: Path, data_dir: Path, retry_count: 
             print(f"✅ {step.filename} 执行完成，用时 {total_elapsed:.2f}s")
             return True, total_elapsed
 
-        print(f"❌ {step.filename} 执行失败（退出码={completed.returncode}），本次用时 {elapsed:.2f}s")
+        print(f"❌ {step.filename} 执行失败（退出码={completed_returncode}），本次用时 {elapsed:.2f}s")
         if attempt < attempts:
             wait_seconds = max(1, retry_backoff * attempt)
             print(f"🔁 {step.filename} 将在 {wait_seconds}s 后重试...")
@@ -222,6 +268,8 @@ def write_report(report_file: str, payload: dict, root: Path) -> None:
 
 def main() -> int:
     args = parse_args()
+    in_process_steps = frozenset([item.strip() for item in args.in_process_steps.split(",") if item.strip()])
+
     if args.clean_only and args.clean_after_run:
         print("❌ 参数冲突：--clean-only 与 --clean-after-run 不能同时使用。")
         return 2
@@ -320,7 +368,7 @@ def main() -> int:
         return 0 if not missing_files else 1
 
     if args.clean_only:
-        ok, _ = run_step(CLEANUP_STEP, script_dir, data_dir, args.retry_count, args.retry_backoff)
+        ok, _ = run_step(CLEANUP_STEP, script_dir, data_dir, args.retry_count, args.retry_backoff, in_process_steps)
         if ok:
             print("🧹 清理任务执行完成。")
             return 0
@@ -334,7 +382,7 @@ def main() -> int:
     started_at = time.strftime("%Y-%m-%d %H:%M:%S")
 
     for step in selected_steps:
-        ok, elapsed = run_step(step, script_dir, data_dir, args.retry_count, args.retry_backoff)
+        ok, elapsed = run_step(step, script_dir, data_dir, args.retry_count, args.retry_backoff, in_process_steps)
         total_time += elapsed
         if not ok:
             failures.append(step.filename)
@@ -343,7 +391,7 @@ def main() -> int:
 
     if args.clean_after_run:
         print("\n🧹 开始执行收尾清理（010 clean.py）...")
-        clean_ok, clean_elapsed = run_step(CLEANUP_STEP, script_dir, data_dir, args.retry_count, args.retry_backoff)
+        clean_ok, clean_elapsed = run_step(CLEANUP_STEP, script_dir, data_dir, args.retry_count, args.retry_backoff, in_process_steps)
         total_time += clean_elapsed
         if not clean_ok:
             failures.append(CLEANUP_STEP.filename)

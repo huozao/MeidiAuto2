@@ -569,3 +569,16 @@ python main.py --list-steps
 2. **check 报告细化**
    - `python main.py --check --report-file data/check-report.json` 会输出详细结构化报告；
    - 报告中包含每个步骤的输入/输出契约、脚本存在性、缺失环境变量和重试配置，便于远程定位问题。
+
+> 关于“现在是否还是高耦合”的判断与依据，已补充在 `docs/ARCHITECTURE_SCORECARD.md` 的“是否仍然高耦合？”章节。
+
+> 关于“关键步骤函数化 + manifest 是否有必要”的结论与分阶段策略，见 `docs/ARCHITECTURE_SCORECARD.md` 新增章节。
+
+### 一次性重构（函数化执行）说明
+
+本次已将关键步骤改为可进程内函数执行（默认：`050 image.py`、`050 mailtxt.py`、`051 Send an email.py`）：
+
+- 默认参数：`--in-process-steps "050 image.py,050 mailtxt.py,051 Send an email.py"`
+- 仍保留子进程回退能力（不在列表中的步骤继续按原子进程执行）
+
+这让你在 PyCharm 中对关键步骤断点调试更直接，也减少跨进程日志噪音。
