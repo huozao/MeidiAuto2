@@ -447,3 +447,138 @@ git push
 3. **如果 incoming 明显是旧版本（把中文日志、新参数、编码修复都删掉）：选 `Accept current change`。**
 
 针对你截图那段 `parse_args()`，通常应优先保留包含 `--clean-only` 与 `--clean-after-run` 的版本；如果另一边还有你需要的参数，就用 `Accept both` 后手工合并成一份完整参数列表。
+
+## 项目评估与维护地图（新增）
+
+为了方便后续维护者快速定位“该改哪个模块”，仓库新增了维护文档：
+
+- `docs/MAINTENANCE_MAP.md`
+
+文档包含：
+
+1. 主流程每个程序模块的功能、输入输出与依赖；
+2. 疑似冗余/历史脚本清单（以及为什么建议归档）；
+3. 日常维护时的“改哪里”速查与最小回归验证路径。
+
+建议修改代码前先读该文档再动手。
+
+### 维护表格（模块清单）自动生成
+
+如果你想长期维护“模块功能表”并避免手工维护出错，使用下面命令：
+
+```bash
+python tools/generate_module_catalog.py
+python tools/generate_module_catalog.py --check
+```
+
+说明：
+- 源数据：`docs/module_catalog.json`
+- 自动产物：
+  - `docs/MODULE_CATALOG.md`（给人看）
+  - `docs/module_catalog.csv`（给表格工具/二次分析用）
+- `--check` 适合在 CI 中做“文档是否过期”校验。
+
+### 结构评分与优化建议（2026-04-01）
+
+当前“主程序串联子程序”结构评分：**8.0 / 10**（已完成中期优化第一阶段）。
+
+优点：
+- `main.py` 统一调度、支持 `--check/--dry-run/--only-step`；
+- 步骤顺序集中在 `pipeline/steps.py`，可维护性较早期脚本串联方式更好。
+
+主要可优化点：
+- 步骤间通过文件传递数据，耦合仍偏高（建议中期演进为 Python 函数化调用 + 统一上下文对象）；
+- 目前 `051 Send an email.py` 依赖图片文件，但主流程没有显式“生成图片”步骤，建议补充可选步骤并在校验层声明其依赖。
+
+### 中期优化（已开始）
+
+本轮已落地两项结构优化：
+
+1. **减少步骤间文件耦合（契约化）**
+   - `pipeline/steps.py` 为每个步骤声明 `input_patterns` / `output_patterns`；
+   - `main.py` 在执行前做输入校验，在执行后做输出校验；
+   - `pipeline/validators.py` 统一校验逻辑，减少脚本内散落的隐式依赖。
+
+2. **补齐图片生成步骤依赖声明**
+   - 主流程新增 `050 image.py`（在发信前生成 `*美的*.png`）；
+   - `051 Send an email.py` 明确依赖 `output.html`、`*美的*.png`、`总库存*.xlsx`。
+
+### PyCharm 新手调试指南（单步 / 串联）
+
+你可以按“先单步、再串联”的方式验证：
+
+#### A. 先做三条基础命令（推荐）
+
+```bash
+python main.py --check
+python main.py --dry-run
+python main.py --list-steps
+```
+
+- `--check`：看脚本和环境变量是否齐全；
+- `--dry-run`：只看执行顺序，不真的处理数据；
+- `--list-steps`：确认步骤列表和编号。
+
+#### B. 在 PyCharm 单独运行某个脚本
+
+以 `030 Warehousing at home.py` 为例：
+
+1. 打开 `Run -> Edit Configurations`；
+2. 新建 `Python` 配置；
+3. `Script path` 选目标脚本（如 `script/030 Warehousing at home.py`）；
+4. `Parameters` 填数据目录（如 `data-local`）；
+5. `Working directory` 设为仓库根目录；
+6. 运行并看控制台输出。
+
+> 单步运行适合排查“某一步逻辑是否正确”。
+
+#### C. 在 PyCharm 跑整条流水线（最常用）
+
+1. 新建 `Python` 配置；
+2. `Script path` 设为 `main.py`；
+3. `Parameters` 可先填：`--dry-run`；
+4. 验证通过后再改为：
+   `--data-dir data-local --stop-on-error --report-file data-local/run-report.json`
+
+> 串联运行适合验证“上下游是否衔接正确”。
+
+#### D. 我到底该“单独运行”还是“串联运行”？
+
+- **改了某个业务脚本（如 041/042）**：先单独运行该步骤，再跑整链路；
+- **改了主调度（main.py / steps.py / validators.py）**：直接跑 `--dry-run` + 整链路；
+- **不确定哪里错**：先 `--check`，再按 `--only-step` 从出错点前一两步开始回放。
+
+#### E. 常见新手坑
+
+- 忘记配置环境变量（邮箱账号/授权码/收件人）；
+- Working directory 不是仓库根目录，导致找不到 `script/` 或 `data/`；
+- 直接跑全流程，不先 `--dry-run`，排错成本高。
+
+### 最新评分与优化路线
+
+如需查看更详细的“分项评分 + P0/P1/P2 优化优先级”，请看：
+
+- `docs/ARCHITECTURE_SCORECARD.md`
+
+### P0 已落地：020 重试机制 + check 报告细化
+
+1. **020 重试机制（网络敏感步骤）**
+   - 默认对 `020 Email download.py` 启用重试（总尝试 = 1 + `--retry-count`，默认重试 2 次）；
+   - 退避等待为 `--retry-backoff * attempt` 秒（默认基值 2）。
+
+2. **check 报告细化**
+   - `python main.py --check --report-file data/check-report.json` 会输出详细结构化报告；
+   - 报告中包含每个步骤的输入/输出契约、脚本存在性、缺失环境变量和重试配置，便于远程定位问题。
+
+> 关于“现在是否还是高耦合”的判断与依据，已补充在 `docs/ARCHITECTURE_SCORECARD.md` 的“是否仍然高耦合？”章节。
+
+> 关于“关键步骤函数化 + manifest 是否有必要”的结论与分阶段策略，见 `docs/ARCHITECTURE_SCORECARD.md` 新增章节。
+
+### 一次性重构（函数化执行）说明
+
+本次已将关键步骤改为可进程内函数执行（默认：`050 image.py`、`050 mailtxt.py`、`051 Send an email.py`）：
+
+- 默认参数：`--in-process-steps "050 image.py,050 mailtxt.py,051 Send an email.py"`
+- 仍保留子进程回退能力（不在列表中的步骤继续按原子进程执行）
+
+这让你在 PyCharm 中对关键步骤断点调试更直接，也减少跨进程日志噪音。
