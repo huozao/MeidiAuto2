@@ -1,3 +1,12 @@
+# ================================================
+# STEP CARD
+# 功能: 生成邮件正文 HTML（异常信息与摘要）。
+# 输入: 总库存*.xlsx
+# 输出: output.html
+# 上游: 042 Color display.py
+# 下游: 051 Send an email.py
+# ================================================
+
 import os
 import sys
 import glob

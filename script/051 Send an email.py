@@ -1,5 +1,14 @@
 from __future__ import annotations
 
+# ================================================
+# STEP CARD
+# 功能: 组装 HTML/图片/Excel 并发送邮件。
+# 输入: output.html, *美的*.png, 总库存*.xlsx, EMAIL_*
+# 输出: 邮件发送结果（stdout）
+# 上游: 050 image.py + 050 mailtxt.py
+# 下游: 无（终端动作）
+# ================================================
+
 import glob
 import os
 import smtplib

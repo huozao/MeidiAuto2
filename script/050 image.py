@@ -1,5 +1,14 @@
 from __future__ import annotations
 
+# ================================================
+# STEP CARD
+# 功能: 把库存表片段导出为邮件图片附件。
+# 输入: 总库存*.xlsx
+# 输出: *美的*.png
+# 上游: 042 Color display.py
+# 下游: 051 Send an email.py
+# ================================================
+
 import glob
 import os
 import re

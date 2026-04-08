@@ -1,5 +1,14 @@
 from __future__ import annotations
 
+# ================================================
+# STEP CARD
+# 功能: 清理 data 与 script/data 下中间产物，便于重复运行。
+# 输入: data 目录（argv[1] 可选）
+# 输出: 清理日志（stdout）
+# 上游: 主流程结束/手动触发
+# 下游: 无（收尾步骤）
+# ================================================
+
 import os
 import sys
 from pathlib import Path
