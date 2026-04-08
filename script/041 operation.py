@@ -7,7 +7,6 @@
 # 下游: 042/050
 # ================================================
 
-import os
 import sys
 import openpyxl
 from openpyxl.styles import Font
@@ -18,7 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from pipeline.io_utils import resolve_data_dir, find_first_excel
+from pipeline.io_utils import ensure_existing_dir, find_required_excel, resolve_data_dir
 
 # ================================
 # 📂 文件路径配置
@@ -26,16 +25,14 @@ from pipeline.io_utils import resolve_data_dir, find_first_excel
 inventory_folder = str(resolve_data_dir(sys.argv[1] if len(sys.argv) >= 2 else None))
 print(f"📂 使用路径: {inventory_folder}")
 
-if not os.path.exists(inventory_folder):
-    print(f"❌ 路径不存在: {inventory_folder}")
-    sys.exit(1)
-
 # ================================
 # 1. 查找文件
 # ================================
-inventory_file = find_first_excel(Path(inventory_folder), "总库存*.xlsx")
-if not inventory_file:
-    print("❌ 没有找到符合条件的文件！")
+try:
+    ensure_existing_dir(Path(inventory_folder), "库存目录")
+    inventory_file = find_required_excel(Path(inventory_folder), "总库存*.xlsx")
+except FileNotFoundError as exc:
+    print(f"❌ {exc}")
     sys.exit(1)
 print(f"✅ 发现库存文件: {inventory_file}")
 

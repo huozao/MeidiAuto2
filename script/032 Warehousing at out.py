@@ -7,7 +7,6 @@
 # 下游: 033/041/042/050
 # ================================================
 
-import os
 import sys
 import openpyxl
 from collections import defaultdict
@@ -17,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from pipeline.io_utils import resolve_data_dir, find_first_excel
+from pipeline.io_utils import ensure_existing_dir, find_required_excel, resolve_data_dir
 
 # ================================
 # 📂 1. 配置：确定库存文件夹路径
@@ -27,14 +26,17 @@ inventory_folder = str(resolve_data_dir(sys.argv[1] if len(sys.argv) >= 2 else N
 print(f"📂 当前使用的文件夹路径: {inventory_folder}")
 
 # 判断路径是否存在
-if not os.path.exists(inventory_folder):
-    print(f"❌ 目录不存在: {inventory_folder}")
+try:
+    ensure_existing_dir(Path(inventory_folder), "库存目录")
+except FileNotFoundError as exc:
+    print(f"❌ {exc}")
     sys.exit(1)
 
 # 匹配以“总库存”开头的 Excel 文件
-inventory_file = find_first_excel(Path(inventory_folder), "总库存*.xlsx")
-if not inventory_file:
-    print("❌ 没有找到符合条件的 Excel 文件！")
+try:
+    inventory_file = find_required_excel(Path(inventory_folder), "总库存*.xlsx")
+except FileNotFoundError as exc:
+    print(f"❌ {exc}")
     sys.exit(1)
 print(f"✅ 找到文件：{inventory_file}")
 
