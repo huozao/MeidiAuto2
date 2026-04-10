@@ -22,30 +22,16 @@ def find_latest_excel(data_dir: Path, pattern: str) -> str | None:
 
 
 def ensure_existing_dir(path: Path, label: str = "目录") -> Path:
+    """校验目录存在，不存在时抛出 FileNotFoundError。"""
     if not path.exists():
         raise FileNotFoundError(f"{label}不存在: {path}")
     return path
 
 
 def find_required_excel(data_dir: Path, pattern: str, latest: bool = False) -> str:
+    """按 pattern 查找 Excel，找不到时抛出 FileNotFoundError。"""
     finder = find_latest_excel if latest else find_first_excel
     found = finder(data_dir, pattern)
     if not found:
         raise FileNotFoundError(f"没有找到符合条件的文件: {pattern}")
-    return found
-
-
-def find_first_match(search_dirs: list[Path], pattern: str) -> str | None:
-    for search_dir in search_dirs:
-        files = glob.glob(str(search_dir / pattern))
-        if files:
-            return files[0]
-    return None
-
-
-def find_required_file(search_dirs: list[Path], pattern: str, label: str = "文件") -> str:
-    found = find_first_match(search_dirs, pattern)
-    if not found:
-        dirs_text = ", ".join(str(path) for path in search_dirs)
-        raise FileNotFoundError(f"没有找到{label}: {pattern}，搜索目录: {dirs_text}")
     return found
