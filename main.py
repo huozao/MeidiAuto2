@@ -18,7 +18,12 @@ from pathlib import Path
 
 from pipeline.models import PipelineStep
 from pipeline.steps import CLEANUP_STEP, PRODUCTION_STEPS
-from pipeline.validators import missing_step_files, validate_step_inputs, validate_step_output
+from pipeline.validators import (
+    missing_step_files,
+    validate_step_inputs,
+    validate_step_output,
+    validate_step_support_inputs,
+)
 
 
 REQUIRED_ENV_KEYS: tuple[str, ...] = (
@@ -31,6 +36,17 @@ RETRYABLE_STEPS: tuple[str, ...] = ("020 Email download.py",)
 DEFAULT_RETRY_COUNT = 2
 DEFAULT_RETRY_BACKOFF_SECONDS = 2
 DEFAULT_IN_PROCESS_STEPS: tuple[str, ...] = ("050 image.py", "050 mailtxt.py", "051 Send an email.py")
+
+
+def _configure_stdio() -> None:
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None or not hasattr(stream, "reconfigure"):
+            continue
+        try:
+            stream.reconfigure(errors="replace")
+        except Exception:
+            pass
 
 
 def parse_args() -> argparse.Namespace:
@@ -190,11 +206,11 @@ def _run_step_in_process(script_path: Path, data_dir: Path) -> tuple[int, str]:
     return 0, ""
 
 
-def run_step(step: PipelineStep, script_dir: Path, data_dir: Path, retry_count: int = DEFAULT_RETRY_COUNT, retry_backoff: int = DEFAULT_RETRY_BACKOFF_SECONDS, in_process_steps: frozenset[str] = frozenset()) -> tuple[bool, float]:
+def run_step(step: PipelineStep, script_dir: Path, data_dir: Path, retry_count: int = DEFAULT_RETRY_COUNT, retry_backoff: int = DEFAULT_RETRY_BACKOFF_SECONDS, in_process_steps: frozenset[str] = frozenset(), require_script: bool = False) -> tuple[bool, float]:
     script_path = script_dir / step.filename
     if not script_path.exists():
         msg = f"❌ 缺少步骤脚本：{script_path}"
-        if step.required:
+        if step.required or require_script:
             print(msg)
             return False, 0.0
         print(f"⚠️ {msg}（可选步骤，已跳过）")
@@ -203,6 +219,11 @@ def run_step(step: PipelineStep, script_dir: Path, data_dir: Path, retry_count: 
     input_ok, input_msg = validate_step_inputs(step, data_dir)
     if not input_ok:
         print(f"❌ {step.filename} 输入校验失败：{input_msg}")
+        return False, 0.0
+
+    support_ok, support_msg = validate_step_support_inputs(step, (data_dir, script_dir / "data"))
+    if not support_ok:
+        print(f"❌ {step.filename} 支撑文件校验失败：{support_msg}")
         return False, 0.0
 
     cmd = [sys.executable, str(script_path), str(data_dir)]
@@ -280,6 +301,7 @@ def write_report(report_file: str, payload: dict, root: Path) -> None:
 
 
 def main() -> int:
+    _configure_stdio()
     args = parse_args()
     in_process_steps = frozenset([item.strip() for item in args.in_process_steps.split(",") if item.strip()])
 
@@ -315,10 +337,13 @@ def main() -> int:
         print(f"❌ 脚本目录不存在：{script_dir}")
         return 2
 
-    steps_to_check: tuple[PipelineStep, ...] = selected_steps
-    if args.clean_only or args.clean_after_run:
+    if args.clean_only:
+        steps_to_check: tuple[PipelineStep, ...] = (CLEANUP_STEP,)
+    else:
+        steps_to_check = selected_steps
+    if args.clean_after_run:
         steps_to_check = selected_steps + (CLEANUP_STEP,)
-    missing_files = missing_step_files(script_dir, steps_to_check)
+    missing_files = missing_step_files(script_dir, steps_to_check, require_all=args.clean_only)
     missing_env = check_environment()
 
     if args.dry_run:
@@ -356,6 +381,7 @@ def main() -> int:
                     "required": step.required,
                     "input_patterns": list(step.input_patterns),
                     "output_patterns": list(step.output_patterns),
+                    "support_patterns": list(step.support_patterns),
                     "script_exists": (script_dir / step.filename).exists(),
                 }
                 for step in steps_to_check
@@ -381,7 +407,15 @@ def main() -> int:
         return 0 if not missing_files else 1
 
     if args.clean_only:
-        ok, _ = run_step(CLEANUP_STEP, script_dir, data_dir, args.retry_count, args.retry_backoff, in_process_steps)
+        ok, _ = run_step(
+            CLEANUP_STEP,
+            script_dir,
+            data_dir,
+            args.retry_count,
+            args.retry_backoff,
+            in_process_steps,
+            require_script=True,
+        )
         if ok:
             print("🧹 清理任务执行完成。")
             return 0

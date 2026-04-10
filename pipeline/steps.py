@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from .models import PipelineStep
 
+
 PRODUCTION_STEPS: tuple[PipelineStep, ...] = (
     PipelineStep(
         "020 Email download.py",
-        output_patterns=("mail_meta.json", "存量查询*.xlsx"),
+        output_patterns=("存量查询*.xlsx", "mail_meta.json"),
     ),
     PipelineStep(
         "021 Merge excel.py",
@@ -26,6 +27,7 @@ PRODUCTION_STEPS: tuple[PipelineStep, ...] = (
         "033 list insertion.py",
         input_patterns=("总库存*.xlsx",),
         output_patterns=("总库存*.xlsx",),
+        support_patterns=("list.xlsx",),
     ),
     PipelineStep(
         "041 operation.py",

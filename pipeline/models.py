@@ -11,3 +11,4 @@ class PipelineStep:
     required: bool = True
     input_patterns: tuple[str, ...] = field(default_factory=tuple)
     output_patterns: tuple[str, ...] = field(default_factory=tuple)
+    support_patterns: tuple[str, ...] = field(default_factory=tuple)
