@@ -10,10 +10,12 @@
   - `pipeline/steps.py`：生产步骤与清理步骤清单。
   - `pipeline/validators.py`：步骤脚本存在性与关键产物校验。
   - `pipeline/io_utils.py`：脚本共享的路径与文件发现工具。
+  - `pipeline/flow_map.py`：业务阶段与常见需求修改导航。
 - `script/`：业务脚本（下载邮件、合并 Excel、计算与着色、生成 HTML、发送邮件）。
 - `.github/workflows/run-daily.yml`：标准化 CI 运行工作流（支持手动+定时）。
 - `requirements.txt`：Python 依赖。
 - `docs/PIPELINE_FLOW.md`：主流程一页图（Mermaid）+ 阅读顺序。
+- `docs/AI_FRIENDLY_REDESIGN.md`：AI 友好型重构说明（主线、边界、改动导航）。
 
 ## 运行方式
 
