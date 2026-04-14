@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+"""流水线步骤定义（按业务阶段组织）。"""
+
 from .models import PipelineStep
 
-PRODUCTION_STEPS: tuple[PipelineStep, ...] = (
+# 阶段 1：邮件数据获取
+EMAIL_INGESTION_STEPS: tuple[PipelineStep, ...] = (
     PipelineStep(
         "020 Email download.py",
         output_patterns=("mail_meta.json", "存量查询*.xlsx"),
     ),
+)
+
+# 阶段 2：库存主表整形
+INVENTORY_TRANSFORMATION_STEPS: tuple[PipelineStep, ...] = (
     PipelineStep(
         "021 Merge excel.py",
         input_patterns=("存量查询*.xlsx",),
@@ -32,6 +39,10 @@ PRODUCTION_STEPS: tuple[PipelineStep, ...] = (
         input_patterns=("总库存*.xlsx",),
         output_patterns=("总库存*.xlsx",),
     ),
+)
+
+# 阶段 3：展示内容生成
+PRESENTATION_STEPS: tuple[PipelineStep, ...] = (
     PipelineStep(
         "042 Color display.py",
         input_patterns=("总库存*.xlsx",),
@@ -47,10 +58,22 @@ PRODUCTION_STEPS: tuple[PipelineStep, ...] = (
         input_patterns=("总库存*.xlsx",),
         output_patterns=("output.html",),
     ),
+)
+
+# 阶段 4：邮件通知
+NOTIFICATION_STEPS: tuple[PipelineStep, ...] = (
     PipelineStep(
         "051 Send an email.py",
         input_patterns=("output.html", "*美的*.png", "总库存*.xlsx"),
     ),
+)
+
+
+PRODUCTION_STEPS: tuple[PipelineStep, ...] = (
+    *EMAIL_INGESTION_STEPS,
+    *INVENTORY_TRANSFORMATION_STEPS,
+    *PRESENTATION_STEPS,
+    *NOTIFICATION_STEPS,
 )
 
 CLEANUP_STEP = PipelineStep("010 clean.py", required=False)
